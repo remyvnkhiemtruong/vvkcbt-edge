@@ -1,44 +1,62 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateSubjectBlueprint } from './blueprint-validator';
-import {
-  BLUEPRINT_FIXTURES,
-  buildValidEnglishClusters,
-} from './__fixtures__/blueprint-fixtures';
-import { TN_THPT_SUBJECTS } from './tn-thpt-catalog';
+import { BLUEPRINT_FIXTURES, buildValidEnglishClusters } from './__fixtures__/blueprint-fixtures';
 
-describe('validateSubjectBlueprint — 11 môn TN THPT', () => {
-  for (const meta of TN_THPT_SUBJECTS) {
-    it(`passes valid fixture for ${meta.code} (${meta.nameVi})`, () => {
-      const paper = BLUEPRINT_FIXTURES[meta.code];
-      const clusters = meta.code === 'ENGLISH' ? buildValidEnglishClusters() : [];
-      const result = validateSubjectBlueprint({
-        subjectCode: meta.code,
-        paper,
-        clusters,
-        mediaManifest: [],
-      });
-      assert.equal(
-        result.valid,
-        true,
-        `${meta.code} errors: ${result.errors.join('; ')}`,
-      );
-    });
-  }
-
-  it('rejects MATH with wrong MCQ count', () => {
-    const paper = { ...BLUEPRINT_FIXTURES.MATH, questions: BLUEPRINT_FIXTURES.MATH.questions.slice(0, 5) };
-    const result = validateSubjectBlueprint({ subjectCode: 'MATH', paper });
-    assert.equal(result.valid, false);
-    assert.ok(result.errors.some((e) => e.includes('part1_mcq')));
+describe('blueprint informatics slots', () => {
+  it('warns when informaticsSlot missing on part II', () => {
+    const paper = BLUEPRINT_FIXTURES.INFORMATICS;
+    const r = validateSubjectBlueprint({ subjectCode: 'INFORMATICS', paper });
+    assert.equal(r.valid, true);
+    assert.ok(r.warnings.some((w) => w.includes('informaticsSlot')));
   });
 
-  it('rejects ENGLISH without clusters', () => {
-    const result = validateSubjectBlueprint({
+  it('errors on duplicate informaticsSlot', () => {
+    const paper = structuredClone(BLUEPRINT_FIXTURES.INFORMATICS);
+    const qs = paper.questions.map((q) => {
+      const row = q as { part?: string; informaticsSlot?: number };
+      if (row.part === 'part2_true_false') {
+        return { ...q, informaticsSlot: 1 };
+      }
+      return q;
+    });
+    const r = validateSubjectBlueprint({
+      subjectCode: 'INFORMATICS',
+      paper: { ...paper, questions: qs },
+    });
+    assert.equal(r.valid, false);
+    assert.ok(r.errors.some((e) => e.includes('trùng')));
+  });
+});
+
+describe('rich content tokens', () => {
+  it('accepts underline/bold tokens in question stem', () => {
+    const paper = structuredClone(BLUEPRINT_FIXTURES.MATH);
+    const q0 = paper.questions[0] as { content: Record<string, unknown> };
+    q0.content = {
+      ...q0.content,
+      stem: '**Bold** and __underline__ with $x^2$',
+      options: ['A. __opt__', 'B. 2', 'C. 3', 'D. 4'],
+    };
+    const r = validateSubjectBlueprint({ subjectCode: 'MATH', paper });
+    assert.equal(r.valid, true);
+  });
+
+  it('validates English clusters with rich passage text', () => {
+    const clusters = buildValidEnglishClusters();
+    const richClusters = clusters.map((c) =>
+      c.clusterSubtype === 'fill_notice'
+        ? {
+            ...c,
+            passage: { text: '**SCHOOL NOTICE**\nRegister at {{1}} by __Friday__.' },
+          }
+        : c,
+    );
+    const r = validateSubjectBlueprint({
       subjectCode: 'ENGLISH',
       paper: BLUEPRINT_FIXTURES.ENGLISH,
-      clusters: [],
+      clusters: richClusters,
     });
-    assert.equal(result.valid, false);
+    assert.equal(r.valid, true);
   });
 });

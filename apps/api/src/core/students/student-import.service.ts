@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
-import { TNPT_36_COMBOS } from '@vnu/shared-types';
+import { TNPT_36_COMBOS, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_CODE } from '@vnu/shared-types';
 import { Student } from '../../database/entities/student.entity';
 import { Class } from '../../database/entities/class.entity';
 import { School } from '../../database/entities/school.entity';
@@ -196,7 +196,7 @@ export class StudentImportService {
     });
     if (!school) {
       school = await this.schoolRepo.save(
-        this.schoolRepo.create({ name: 'THPT Demo VNU', code: 'VNU001' }),
+        this.schoolRepo.create({ name: DEFAULT_SCHOOL_NAME, code: DEFAULT_SCHOOL_CODE }),
       );
     }
     return school;

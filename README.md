@@ -1,6 +1,6 @@
 # VVKCBT — Hệ thống thi Edge LAN
 
-**VVKCBT** (Võ Văn Kiệt Computer-Based Testing) — hệ thống thi trắc nghiệm LAN cho **THPT Võ Văn Kiệt, Cà Mau**.
+**VVKCBT** (Võ Văn Kiệt Computer-Based Testing) — hệ thống thi trắc nghiệm LAN cho **THPT Võ Văn Kiệt**.
 
 **Tác giả:** Trương Minh Khiêm
 

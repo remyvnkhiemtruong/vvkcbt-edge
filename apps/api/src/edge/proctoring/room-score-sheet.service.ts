@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import * as puppeteer from 'puppeteer';
-import { TN_THPT_SUBJECTS } from '@vnu/shared-types';
+import { TN_THPT_SUBJECTS, DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
 import { ExamSession } from '../../database/entities/exam-session.entity';
 import { StudentSubjectSlot } from '../../database/entities/student-subject-slot.entity';
 import { StudentSession } from '../../database/entities/student-session.entity';
@@ -13,8 +13,6 @@ export interface RoomScoreSheetQuery {
   room: string;
   proctor1Name?: string;
   proctor2Name?: string;
-  signature1?: string;
-  signature2?: string;
   format: 'pdf' | 'xlsx';
 }
 
@@ -28,7 +26,6 @@ export interface RoomScoreSheetRow {
   part3: string | number;
   total: string | number;
   note?: string;
-  pendingManual?: boolean;
 }
 
 interface SheetMeta {
@@ -41,8 +38,6 @@ interface SheetMeta {
   dateLine: string;
   proctor1Name: string;
   proctor2Name: string;
-  signature1?: string;
-  signature2?: string;
   submittedCount: number;
   absentCount: number;
 }
@@ -112,7 +107,7 @@ export class RoomScoreSheetService {
     stats: { total: number; completed: number },
   ): SheetMeta {
     const now = new Date();
-    const schoolName = process.env.VITE_SCHOOL_NAME || 'TRƯỜNG THPT VÕ VĂN KIỆT';
+    const schoolName = process.env.VITE_SCHOOL_NAME || process.env.SCHOOL_NAME || DEFAULT_SCHOOL_NAME;
     const provinceName = process.env.VITE_PROVINCE_NAME || 'SỞ GDĐT CÀ MAU';
     return {
       examName,
@@ -124,8 +119,6 @@ export class RoomScoreSheetService {
       dateLine: `Cà Mau, ngày ${now.getDate()} tháng ${now.getMonth() + 1} năm ${now.getFullYear()}`,
       proctor1Name: query.proctor1Name ?? '',
       proctor2Name: query.proctor2Name ?? '',
-      signature1: query.signature1,
-      signature2: query.signature2,
       submittedCount: stats.completed,
       absentCount: Math.max(0, stats.total - stats.completed),
     };
@@ -185,7 +178,6 @@ export class RoomScoreSheetService {
       const p3 = parts.part3;
       const hasP2 = p2 != null;
       const hasP3 = p3 != null;
-      const pendingManual = score.pendingManual === true;
       return {
         stt: i + 1,
         sbd: sbdByStudent.get(slot.studentId) ?? '',
@@ -194,9 +186,8 @@ export class RoomScoreSheetService {
         part1: p1 != null ? p1 : hasP2 || hasP3 ? '' : (typeof score.total === 'number' ? score.total : ''),
         part2: hasP2 ? p2 : '',
         part3: hasP3 ? p3 : '',
-        total: pendingManual ? '' : typeof score.total === 'number' ? score.total : '',
-        note: pendingManual ? 'Chờ chấm tự luận' : '',
-        pendingManual,
+        total: typeof score.total === 'number' ? score.total : '',
+        note: '',
       };
     });
   }
@@ -206,14 +197,43 @@ export class RoomScoreSheetService {
     const sheet = wb.addWorksheet('BienBanDiem');
     sheet.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true };
 
+    const center = { horizontal: 'center' as const, vertical: 'middle' as const };
+    const border = {
+      top: { style: 'thin' as const },
+      left: { style: 'thin' as const },
+      bottom: { style: 'thin' as const },
+      right: { style: 'thin' as const },
+    };
+
     sheet.mergeCells('A1:J1');
-    sheet.getCell('A1').value = meta.provinceName;
+    sheet.getCell('A1').value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
+    sheet.getCell('A1').alignment = center;
+    sheet.getCell('A1').font = { name: 'Times New Roman', size: 12, bold: true };
+
     sheet.mergeCells('A2:J2');
-    sheet.getCell('A2').value = meta.schoolName;
+    sheet.getCell('A2').value = 'Độc lập - Tự do - Hạnh phúc';
+    sheet.getCell('A2').alignment = center;
+    sheet.getCell('A2').font = { name: 'Times New Roman', size: 12, underline: true };
+
     sheet.mergeCells('A3:J3');
-    sheet.getCell('A3').value = 'BIÊN BẢN XÁC NHẬN ĐIỂM THI';
+    sheet.getCell('A3').value = meta.provinceName;
+    sheet.getCell('A3').alignment = center;
+    sheet.getCell('A3').font = { name: 'Times New Roman', size: 12, bold: true };
+
     sheet.mergeCells('A4:J4');
-    sheet.getCell('A4').value = `Môn: ${meta.subjectName} · Phòng: ${meta.room} · ${meta.examName}`;
+    sheet.getCell('A4').value = meta.schoolName;
+    sheet.getCell('A4').alignment = center;
+    sheet.getCell('A4').font = { name: 'Times New Roman', size: 13, bold: true };
+
+    sheet.mergeCells('A5:J5');
+    sheet.getCell('A5').value = 'BIÊN BẢN XÁC NHẬN ĐIỂM THI';
+    sheet.getCell('A5').alignment = center;
+    sheet.getCell('A5').font = { name: 'Times New Roman', size: 14, bold: true, underline: true };
+
+    sheet.mergeCells('A6:J6');
+    sheet.getCell('A6').value = `Kỳ thi: ${meta.examName} · Môn: ${meta.subjectName} · Phòng: ${meta.room}`;
+    sheet.getCell('A6').alignment = center;
+    sheet.getCell('A6').font = { name: 'Times New Roman', size: 12 };
     sheet.addRow([]);
 
     const header = sheet.addRow([
@@ -228,17 +248,12 @@ export class RoomScoreSheetService {
       'Ghi chú',
       'Ký TS',
     ]);
-    header.font = { bold: true, name: 'Times New Roman', size: 13 };
+    header.font = { bold: true, name: 'Times New Roman', size: 12 };
     header.eachCell((c) => {
-      c.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
-      };
-      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.border = border;
+      c.alignment = center;
     });
-    sheet.views = [{ state: 'frozen', ySplit: 6 }];
+    sheet.views = [{ state: 'frozen', ySplit: 8 }];
 
     for (const r of rows) {
       const row = sheet.addRow([
@@ -253,22 +268,18 @@ export class RoomScoreSheetService {
         r.note ?? '',
         '',
       ]);
-      row.font = { name: 'Times New Roman', size: 13 };
+      row.font = { name: 'Times New Roman', size: 12 };
       row.eachCell((c) => {
-        c.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
+        c.border = border;
       });
     }
 
     sheet.addRow([]);
     const summary = sheet.addRow([
-      `Đã nộp: ${meta.submittedCount} · Vắng/chưa nộp: ${meta.absentCount}`,
+      `Tổng kết: Đã nộp ${meta.submittedCount} · Vắng/chưa nộp ${meta.absentCount}`,
     ]);
     sheet.mergeCells(`A${summary.number}:J${summary.number}`);
+    summary.font = { name: 'Times New Roman', size: 12, bold: true };
     sheet.addRow([]);
     const sign = sheet.addRow([
       `Giám thị 1: ${meta.proctor1Name}`,
@@ -279,8 +290,16 @@ export class RoomScoreSheetService {
     ]);
     sheet.mergeCells(`A${sign.number}:D${sign.number}`);
     sheet.mergeCells(`E${sign.number}:J${sign.number}`);
+    sign.font = { name: 'Times New Roman', size: 12 };
+    sheet.addRow([]);
+    const signHint = sheet.addRow(['(Ký và ghi rõ họ tên)', '', '', '', '(Ký và ghi rõ họ tên)']);
+    sheet.mergeCells(`A${signHint.number}:D${signHint.number}`);
+    sheet.mergeCells(`E${signHint.number}:J${signHint.number}`);
+    signHint.font = { name: 'Times New Roman', size: 11, italic: true };
     sheet.addRow([meta.dateLine]);
     sheet.mergeCells(`A${sheet.lastRow!.number}:J${sheet.lastRow!.number}`);
+    sheet.getCell(`A${sheet.lastRow!.number}`).alignment = { horizontal: 'right' };
+    sheet.getCell(`A${sheet.lastRow!.number}`).font = { name: 'Times New Roman', size: 12, italic: true };
 
     const buf = await wb.xlsx.writeBuffer();
     return Buffer.from(buf);
@@ -302,12 +321,6 @@ export class RoomScoreSheetService {
       )
       .join('');
 
-    const sig1 = meta.signature1
-      ? `<img src="${meta.signature1}" alt="GT1" style="max-height:48px"/>`
-      : '';
-    const sig2 = meta.signature2
-      ? `<img src="${meta.signature2}" alt="GT2" style="max-height:48px"/>`
-      : '';
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
       <style>
@@ -346,12 +359,10 @@ export class RoomScoreSheetService {
       <div class="signatures">
         <div class="sign-block">
           <div>Giám thị 1: <strong>${this.esc(meta.proctor1Name)}</strong></div>
-          ${sig1}
           <div class="sign-line">Ký và ghi rõ họ tên</div>
         </div>
         <div class="sign-block">
           <div>Giám thị 2: <strong>${this.esc(meta.proctor2Name)}</strong></div>
-          ${sig2}
           <div class="sign-line">Ký và ghi rõ họ tên</div>
         </div>
       </div>

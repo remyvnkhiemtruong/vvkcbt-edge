@@ -145,7 +145,7 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   if (!state.manifest?.packageId) errors.push('Thiếu manifest.packageId');
   if (!state.session?.name?.trim()) errors.push('Thiếu tên kỳ thi');
 
-  for (const code of ['LITERATURE', 'MATH']) {
+  for (const code of ['MATH']) {
     const paper = state.papers?.[code];
     if (!paper?.questions?.length) {
       errors.push(`Môn bắt buộc ${code} chưa có đề hoặc thiếu câu hỏi`);
@@ -184,7 +184,7 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   const qCount = Object.values(state.papers ?? {}).reduce((n, p) => n + (p.questions?.length ?? 0), 0);
   if (qCount === 0) warnings.push('Ngân hàng câu hỏi trống');
 
-  const subjectsToValidate = new Set<string>(['LITERATURE', 'MATH', ...allSubjects]);
+  const subjectsToValidate = new Set<string>(['MATH', ...allSubjects]);
   const blueprint = validateAllSubjectBlueprints(
     state.papers ?? {},
     [...subjectsToValidate],
@@ -420,7 +420,7 @@ export async function validateZip(buffer: Buffer): Promise<ExamPackageValidateRe
 
     const isSingleSubject = manifest?.exportScope === 'single_subject';
     const requiredPaperCodes =
-      isSingleSubject && manifest?.subjectCode ? [manifest.subjectCode] : ['LITERATURE', 'MATH'];
+      isSingleSubject && manifest?.subjectCode ? [manifest.subjectCode] : ['MATH'];
 
     for (const code of requiredPaperCodes) {
       const paperPath = path.join(workDir, 'papers', `${code}.json`);
@@ -603,7 +603,7 @@ export async function buildTemplateZip(): Promise<Buffer> {
   const manifest: ExamPackageManifest = {
     formatVersion: EXAM_PACKAGE_FORMAT_VERSION,
     packageId,
-    examName: 'Thi thử TN THPT 2025 (mẫu)',
+    examName: 'Thi thử — THPT Võ Văn Kiệt',
     createdAt: now,
     mediaManifest: [],
   };
@@ -640,7 +640,7 @@ export async function buildTemplateZip(): Promise<Buffer> {
       fullName: 'Nguyễn Văn A',
       studentCode: 'HS001',
       className: '12A1',
-      subjects: ['LITERATURE', 'MATH', 'PHYSICS', 'CHEMISTRY'],
+      subjects: ['MATH', 'PHYSICS', 'CHEMISTRY'],
       sbd: '1001',
       pin: '12345678',
     },

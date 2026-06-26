@@ -8,6 +8,7 @@ export function useFocusGuard(enabled: boolean) {
   const violations = useExamStore((s) => s.violations);
 
   const reportViolation = useCallback(async (reason: string) => {
+    if (!useExamStore.getState().token) return;
     try {
       const res = await studentApi.focusViolation(reason);
       setViolations(res.violations);

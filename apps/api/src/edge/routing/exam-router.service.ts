@@ -6,10 +6,9 @@ import { ExamPaper } from '../../database/entities/exam-paper.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
 import { GdptSubjectStream } from '../../database/entities/gdpt-subject-stream.entity';
 import { StudentSubjectSlot } from '../../database/entities/student-subject-slot.entity';
-import { TnptComboCatalog } from '../../database/entities/tnpt-combo-catalog.entity';
 import { ExamStructureTemplate } from '../../database/entities/exam-structure-template.entity';
 import { StudentSession } from '../../database/entities/student-session.entity';
-import { ExamType, RoutingMode, SubjectRoutingConfig } from '@vnu/shared-types';
+import { SubjectRoutingConfig } from '@vnu/shared-types';
 import { StructureResolverService } from '../../core/structure/structure-resolver.service';
 
 @Injectable()
@@ -25,8 +24,6 @@ export class ExamRouterService {
     private readonly streamRepo: Repository<GdptSubjectStream>,
     @InjectRepository(StudentSubjectSlot)
     private readonly slotRepo: Repository<StudentSubjectSlot>,
-    @InjectRepository(TnptComboCatalog)
-    private readonly comboRepo: Repository<TnptComboCatalog>,
     @InjectRepository(ExamStructureTemplate)
     private readonly templateRepo: Repository<ExamStructureTemplate>,
     @InjectRepository(StudentSession)
@@ -34,70 +31,35 @@ export class ExamRouterService {
     private readonly structureResolver: StructureResolverService,
   ) {}
 
-  async resolvePaper(examSessionId: string, studentId?: string, comboCode?: string, subjectGroup?: string) {
+  /** Định tuyến theo môn — không dùng tổ hợp. */
+  async resolvePaper(examSessionId: string, studentId?: string, subjectCode?: string) {
+    if (subjectCode) {
+      return this.resolvePaperBySubject(examSessionId, subjectCode);
+    }
+
     const session = await this.sessionRepo.findOne({ where: { id: examSessionId } });
     if (!session) throw new Error('Exam session not found');
-
-    const routing = (session.routingConfig || {}) as SubjectRoutingConfig;
-    const resolveOrder = routing.resolve_order ?? [
-      session.routingMode === RoutingMode.FIXED_COMBO ? 'combo_code' : 'subject_group',
-    ];
 
     let student: Student | null = null;
     if (studentId) {
       student = await this.studentRepo.findOne({ where: { id: studentId } });
     }
 
-    for (const step of resolveOrder) {
-      if (step === 'combo_code') {
-        const code = comboCode ?? student?.comboCode;
-        if (!code) continue;
-
-        if (routing.combo_map?.[code]) {
-          const paper = await this.paperRepo.findOne({ where: { id: routing.combo_map[code] } });
-          if (paper) return paper;
-        }
-
-        const paper = await this.paperRepo.findOne({
-          where: { examSessionId, comboCode: code },
-        });
-        if (paper) return paper;
-
-        const combo = await this.comboRepo.findOne({ where: { comboCode: code } });
-        if (combo && student) {
-          const elective = combo.subjects.find((s) => s !== 'MATH' && s !== 'LITERATURE');
-          if (elective && subjectGroup) {
-            const bySubject = await this.paperRepo.findOne({
-              where: { examSessionId, subject: subjectGroup },
-            });
-            if (bySubject) return bySubject;
-          }
-        }
-      }
-
-      if (step === 'subject_group' || step === 'grade_stream') {
-        const group = subjectGroup ?? student?.subjectGroup;
-        if (!group) continue;
-
-        if (routing.subject_map?.[group]) {
-          const paper = await this.paperRepo.findOne({ where: { id: routing.subject_map[group] } });
-          if (paper) return paper;
-        }
-
-        const streams = await this.streamRepo.find({ where: { examSessionId } });
-        const stream = streams.find((s) => s.subjectCodes.includes(group));
-        if (stream?.examPaperId) {
-          const paper = await this.paperRepo.findOne({ where: { id: stream.examPaperId } });
-          if (paper) return paper;
-        }
-
-        const paper = await this.paperRepo.findOne({
-          where: { examSessionId, subject: group },
-        });
+    const group = student?.subjectGroup;
+    if (group) {
+      const routing = (session.routingConfig || {}) as SubjectRoutingConfig;
+      if (routing.subject_map?.[group]) {
+        const paper = await this.paperRepo.findOne({ where: { id: routing.subject_map[group] } });
         if (paper) return paper;
       }
+
+      const paper = await this.paperRepo.findOne({
+        where: { examSessionId, subject: group },
+      });
+      if (paper) return paper;
     }
 
+    const routing = (session.routingConfig || {}) as SubjectRoutingConfig;
     if (routing.default_paper_id) {
       const paper = await this.paperRepo.findOne({ where: { id: routing.default_paper_id } });
       if (paper) return paper;
@@ -245,17 +207,6 @@ export class ExamRouterService {
     });
   }
 
-  async countPendingSlots(
-    studentSessionId: string,
-    studentId: string,
-    examSessionId: string,
-  ): Promise<number> {
-    const slots = await this.slotRepo.find({
-      where: { studentSessionId, studentId, examSessionId },
-    });
-    return slots.filter((s) => s.status !== 'completed').length;
-  }
-
   async getStructureTemplateForSession(session: ExamSession, subject?: string) {
     if (subject) {
       return this.structureResolver.resolveForSubject(subject, session.rules);
@@ -266,7 +217,7 @@ export class ExamRouterService {
     return null;
   }
 
-  isTnptPersonalized(session: ExamSession): boolean {
-    return session.rules?.exam_type === ExamType.TN_THPT_2025;
+  isTnptPersonalized(_session: ExamSession): boolean {
+    return false;
   }
 }

@@ -1,9 +1,55 @@
+/* —— Proctor dark theme tokens —— */
+.cbt-app-window--dark .cbt-app-body {
+  --proctor-bg: #1a2d4a;
+  --proctor-surface: #243b5c;
+  --proctor-surface-elevated: #2d4a6e;
+  --proctor-border: #4a6a94;
+  --proctor-text: #f8fafc;
+  --proctor-text-secondary: #c8d6e8;
+  --proctor-text-muted: #9fb0c8;
+  --proctor-accent: #5ba3e8;
+  --proctor-success: #4ade80;
+  --proctor-danger: #f87171;
+  --proctor-warning-bg: #fef9c3;
+  --proctor-warning-text: #854d0e;
+  --proctor-success-bg: #dcfce7;
+  --proctor-success-text: #166534;
+}
+
+/* —— Toolbar & nav —— */
 .proctor-toolbar {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   align-items: center;
   margin-bottom: 1rem;
   flex-wrap: wrap;
+}
+
+.proctor-mode-nav {
+  justify-content: flex-start;
+}
+
+.proctor-mode-nav .cbt-btn {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.75rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.cbt-app-window--dark .proctor-mode-nav .cbt-btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text-secondary);
+}
+
+.cbt-app-window--dark .proctor-mode-nav .cbt-btn-outline:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--proctor-text);
+}
+
+.cbt-app-window--dark .proctor-mode-nav .cbt-btn-primary {
+  background: var(--cbt-primary);
+  color: #fff;
 }
 
 .proctor-ws {
@@ -12,39 +58,279 @@
 }
 
 .proctor-ws.on {
-  color: #4ade80;
+  color: var(--proctor-success);
 }
 
 .proctor-ws.off {
-  color: #f87171;
+  color: var(--proctor-text-muted);
 }
 
+/* —— Inputs on dark background —— */
+.cbt-app-window--dark .proctor-input {
+  background: var(--proctor-surface);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text);
+  max-width: 220px;
+}
+
+.cbt-app-window--dark .proctor-input::placeholder {
+  color: var(--proctor-text-muted);
+}
+
+.cbt-app-window--dark .proctor-input option {
+  background: var(--proctor-surface);
+  color: var(--proctor-text);
+}
+
+.cbt-app-window--dark .proctor-input--filter {
+  max-width: 180px;
+}
+
+/* —— Alerts —— */
 .proctor-alerts {
   margin-bottom: 1rem;
 }
 
 .proctor-alert {
-  background: var(--cbt-warning-bg);
-  border: 1px solid var(--cbt-warning-border);
-  color: #92400e;
-  padding: 0.5rem 0.75rem;
+  background: var(--proctor-warning-bg);
+  border: 1px solid #fbbf24;
+  color: var(--proctor-warning-text);
+  padding: 0.55rem 0.85rem;
   border-radius: var(--cbt-radius-sm);
   margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.proctor-alert--success {
+  background: var(--proctor-success-bg);
+  border-color: #22c55e;
+  color: var(--proctor-success-text);
+}
+
+/* —— Monitor tools —— */
+.proctor-monitor-main {
+  min-width: 0;
+}
+
+.proctor-grid-tools {
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* —— Tab panels —— */
+.proctor-tab-panel {
+  color: var(--proctor-text-secondary);
+  padding: 0.25rem 0 1rem;
+  min-height: 420px;
+}
+
+.proctor-tab-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  color: var(--proctor-text);
+}
+
+.proctor-tab-panel h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--proctor-text-secondary);
+}
+
+.proctor-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.proctor-tab-header h3 {
+  margin: 0;
+}
+
+.cbt-app-window--dark .proctor-tab-panel .admin-hint,
+.cbt-app-window--dark .admin-hint {
+  color: var(--proctor-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.proctor-tab-msg {
+  margin-top: 0.75rem;
+  color: var(--proctor-accent);
   font-size: 0.9rem;
 }
 
-.proctor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0.75rem;
+.proctor-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.proctor-form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--proctor-text-secondary);
+  min-width: 140px;
+}
+
+.cbt-app-window--dark .proctor-form-row .cbt-input {
+  background: var(--proctor-surface);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text);
+}
+
+.proctor-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+/* —— Schedule tab —— */
+.proctor-schedule-meta {
+  color: var(--proctor-text-secondary);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.cbt-app-window--dark .proctor-schedule-table {
+  color: var(--proctor-text);
+}
+
+/* —— Tables —— */
+.proctor-table-wrap {
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  border-radius: var(--cbt-radius-sm);
+  padding: 0.5rem;
+  overflow-x: auto;
+}
+
+.proctor-table-wrap .cbt-table,
+.proctor-student-table .cbt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  color: var(--proctor-text);
+}
+
+.proctor-table-wrap .cbt-table th,
+.proctor-student-table .cbt-table th {
+  background: var(--proctor-surface-elevated);
+  color: var(--proctor-text);
+  padding: 0.6rem 0.7rem;
+  border-bottom: 2px solid var(--proctor-border);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.proctor-table-wrap .cbt-table td,
+.proctor-student-table .cbt-table td {
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid rgba(74, 106, 148, 0.45);
+  color: var(--proctor-text-secondary);
+  vertical-align: middle;
+  background: transparent;
+}
+
+.proctor-student-table .cbt-table tbody tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.proctor-table-wrap .cbt-table tbody tr:hover td,
+.proctor-student-table .cbt-table tbody tr:hover td {
+  background: rgba(91, 163, 232, 0.12);
+  color: var(--proctor-text);
+}
+
+.proctor-student-table .cbt-table tr.cbt-row-danger td {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: #fecaca;
+}
+
+.proctor-student-table {
+  margin-bottom: 0.75rem;
+}
+
+.proctor-student-table__note {
+  font-size: 0.8rem;
+  color: var(--proctor-text-muted);
+  max-width: 14rem;
+  display: inline-block;
+  line-height: 1.35;
+}
+
+.proctor-student-table__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.cbt-app-window--dark .proctor-student-table__btn.cbt-btn-outline {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text-secondary);
+  font-size: 0.72rem;
+  padding: 0.25rem 0.5rem;
+  min-height: auto;
+}
+
+.cbt-app-window--dark .proctor-student-table__btn.cbt-btn-primary {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.5rem;
+  min-height: auto;
+}
+
+.proctor-audit-detail {
+  color: var(--proctor-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.proctor-audit-actor {
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.proctor-audit-actor--student {
+  color: #93c5fd;
+}
+
+.proctor-audit-actor--proctor {
+  color: #c4b5fd;
+}
+
+.proctor-audit-actor--system {
+  color: var(--proctor-text-muted);
+  font-weight: 500;
+}
+
+/* —— Detail / action panel —— */
+.proctor-action-panel {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  border-radius: var(--cbt-radius-sm);
+  color: var(--proctor-text);
 }
 
 .proctor-actions-panel {
   margin-top: 1.25rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
   border-radius: var(--cbt-radius-sm);
-  color: #e2e8f0;
+  color: var(--proctor-text-secondary);
 }
 
 .proctor-actions {
@@ -54,7 +340,187 @@
   margin-top: 0.75rem;
 }
 
-.proctor-actions .cbt-btn {
+.cbt-app-window--dark .proctor-actions .cbt-btn-outline,
+.cbt-app-window--dark .proctor-action-panel .cbt-btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text-secondary);
+}
+
+/* —— System tab —— */
+.proctor-system-checks {
+  margin-top: 1rem;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  max-width: 560px;
+}
+
+.proctor-system-checks li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  border-radius: var(--cbt-radius-sm);
+  font-size: 0.88rem;
+}
+
+.proctor-system-checks__label {
+  color: var(--proctor-text-secondary);
+}
+
+.proctor-system-checks__ok {
+  color: var(--proctor-success);
+  font-weight: 600;
+}
+
+.proctor-system-checks__err {
+  color: var(--proctor-danger);
+  font-weight: 600;
+}
+
+.proctor-system-notes {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--proctor-border);
+}
+
+.proctor-system-notes ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+/* —— Backup tab —— */
+.proctor-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.proctor-backup-list-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  color: var(--proctor-text-secondary);
+}
+
+.proctor-backup-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.proctor-backup-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  border-radius: var(--cbt-radius-sm);
+}
+
+.proctor-backup-list__name {
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: var(--proctor-text);
+  word-break: break-all;
+}
+
+.proctor-backup-list__btns {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.cbt-btn-sm {
+  font-size: 0.75rem !important;
+  padding: 0.35rem 0.6rem !important;
+}
+
+.cbt-app-window--dark .proctor-tab-panel .cbt-btn-outline,
+.cbt-app-window--dark .proctor-backup-list .cbt-btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text-secondary);
+}
+
+/* —— HA diagram —— */
+.ha-diagram {
+  margin-top: 0.5rem;
+}
+
+.ha-node {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 1.5rem;
+  border-radius: var(--cbt-radius-sm);
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  color: var(--proctor-text);
+}
+
+.ha-node--ok {
+  border-color: #22c55e;
+}
+
+.ha-node--down {
+  border-color: #ef4444;
+}
+
+.ha-badge {
   font-size: 0.8rem;
-  padding: 0.5rem 0.85rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.ha-badge--ok {
+  background: #14532d;
+  color: #86efac;
+}
+
+.ha-badge--down {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
+/* —— Dark tab buttons in post-exam modes —— */
+.cbt-app-window--dark .cbt-app-body .cbt-btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text-secondary);
+}
+
+.cbt-app-window--dark .cbt-app-body .cbt-btn-outline:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--proctor-text);
+}
+
+.cbt-app-window--dark .cbt-app-body .cbt-input,
+.cbt-app-window--dark .cbt-app-body .cbt-select,
+.cbt-app-window--dark .cbt-app-body .cbt-textarea {
+  background: var(--proctor-surface);
+  border-color: var(--proctor-border);
+  color: var(--proctor-text);
+}
+
+.cbt-app-window--dark .cbt-app-body .cbt-table th {
+  background: var(--proctor-surface-elevated);
+  color: var(--proctor-text);
+  border-color: var(--proctor-border);
+}
+
+.cbt-app-window--dark .cbt-app-body .cbt-table td {
+  color: var(--proctor-text-secondary);
+  border-color: rgba(74, 106, 148, 0.4);
 }

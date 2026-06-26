@@ -1,8 +1,15 @@
 import { translateApiError } from '@shared/index';
+import { useExamStore } from './store';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
+const examFetchOpts = { logoutOn401: false as const };
+
+export async function apiFetch(
+  path: string,
+  options: RequestInit = {},
+  fetchOpts?: { logoutOn401?: boolean },
+) {
   const token = localStorage.getItem('vnu_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -11,6 +18,9 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API}/api${path}`, { ...options, headers });
+  if (res.status === 401 && fetchOpts?.logoutOn401 !== false) {
+    useExamStore.getState().logout();
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(translateApiError(err.message || 'Request failed'));
@@ -29,30 +39,32 @@ export const studentApi = {
         ...(examSessionId ? { examSessionId } : {}),
       }),
     }),
-  listSlots: () => apiFetch('/edge/slots'),
-  startSlot: (slotId: string) =>
-    apiFetch(`/edge/slots/${slotId}/start`, { method: 'POST' }),
   getExam: () => apiFetch('/edge/exam'),
+  /** Đồng bộ trong lúc thi — không logout khi 401 tạm (IP/locked). */
+  syncExam: () => apiFetch('/edge/exam', {}, examFetchOpts),
   autosave: (answers: Record<string, unknown>, idempotencyKey?: string) => {
     const headers: Record<string, string> = {};
     if (idempotencyKey) {
       headers['Idempotency-Key'] = idempotencyKey;
       headers['X-Idempotency-Key'] = idempotencyKey;
     }
-    return apiFetch('/edge/answers', {
-      method: 'PATCH',
-      body: JSON.stringify({ answers }),
-      headers,
-    });
+    return apiFetch(
+      '/edge/answers',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ answers }),
+        headers,
+      },
+      examFetchOpts,
+    );
   },
-  submit: () => apiFetch('/edge/submit', { method: 'POST' }),
-  submitRetry: () => apiFetch('/edge/submit-retry', { method: 'POST' }),
+  submit: () => apiFetch('/edge/submit', { method: 'POST' }, examFetchOpts),
+  submitRetry: () => apiFetch('/edge/submit-retry', { method: 'POST' }, examFetchOpts),
   focusViolation: (reason?: string) =>
-    apiFetch('/edge/focus-violation', { method: 'POST', body: JSON.stringify({ reason }) }),
+    apiFetch('/edge/focus-violation', { method: 'POST', body: JSON.stringify({ reason }) }, examFetchOpts),
   violationsBatch: (events: Array<{ reason?: string; at?: string }>) =>
-    apiFetch('/edge/violations/batch', { method: 'POST', body: JSON.stringify({ events }) }),
-  prefetch: (slotId: string) => apiFetch(`/edge/prefetch/${slotId}`),
-  heartbeat: () => apiFetch('/edge/heartbeat', { method: 'POST' }),
+    apiFetch('/edge/violations/batch', { method: 'POST', body: JSON.stringify({ events }) }, examFetchOpts),
+  heartbeat: () => apiFetch('/edge/heartbeat', { method: 'POST' }, examFetchOpts),
   auditClick: (target: string) =>
-    apiFetch('/edge/audit/click', { method: 'POST', body: JSON.stringify({ target }) }),
+    apiFetch('/edge/audit/click', { method: 'POST', body: JSON.stringify({ target }) }, examFetchOpts),
 };

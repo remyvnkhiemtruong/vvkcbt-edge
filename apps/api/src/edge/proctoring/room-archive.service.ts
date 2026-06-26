@@ -21,8 +21,6 @@ export interface RoomArchiveOptions {
   room?: string;
   proctor1Name?: string;
   proctor2Name?: string;
-  signature1?: string;
-  signature2?: string;
 }
 
 @Injectable()
@@ -84,8 +82,6 @@ export class RoomArchiveService {
           format: 'pdf',
           proctor1Name: opts.proctor1Name,
           proctor2Name: opts.proctor2Name,
-          signature1: opts.signature1,
-          signature2: opts.signature2,
         });
         const ext = pdfResult.format === 'pdf' ? 'pdf' : 'xlsx';
         addFile(
@@ -99,8 +95,6 @@ export class RoomArchiveService {
             format: 'xlsx',
             proctor1Name: opts.proctor1Name,
             proctor2Name: opts.proctor2Name,
-            signature1: opts.signature1,
-            signature2: opts.signature2,
           });
           addFile(
             `bien-ban-diem/BienBanDiem_${subjectCode}_${roomName.replace(/\s+/g, '_')}.xlsx`,

@@ -16,16 +16,16 @@ describe('Exam master X column parsing', () => {
     expect(isMarkedXForTest('no')).toBe(false);
   });
 
-  it('maps all 11 TN THPT subject column headers', () => {
-    expect(TN_THPT_SUBJECTS).toHaveLength(11);
+  it('maps all 10 TN THPT subject column headers', () => {
+    expect(TN_THPT_SUBJECTS).toHaveLength(10);
     for (const subj of TN_THPT_SUBJECTS) {
       expect(resolveSubjectFromHeader(subj.nameVi)).toBe(subj.code);
     }
   });
 
-  it('requires LITERATURE and MATH in mandatory set', () => {
-    expect(MANDATORY_SUBJECTS).toContain('LITERATURE');
+  it('requires MATH in mandatory set', () => {
     expect(MANDATORY_SUBJECTS).toContain('MATH');
+    expect(MANDATORY_SUBJECTS).toHaveLength(1);
   });
 });
 
@@ -40,19 +40,18 @@ describe('Exam master mandatory validation', () => {
     return errors;
   }
 
-  it('rejects student missing Văn or Toán', () => {
-    expect(validateMandatory(new Set(['MATH', 'ENGLISH']))).toHaveLength(1);
-    expect(validateMandatory(new Set(['LITERATURE', 'ENGLISH']))).toHaveLength(1);
-    expect(validateMandatory(new Set(['ENGLISH', 'PHYSICS']))).toHaveLength(2);
+  it('rejects student missing Toán', () => {
+    expect(validateMandatory(new Set(['MATH', 'ENGLISH']))).toHaveLength(0);
+    expect(validateMandatory(new Set(['ENGLISH', 'PHYSICS']))).toHaveLength(1);
   });
 
-  it('accepts student with both mandatory subjects', () => {
-    expect(validateMandatory(new Set(['LITERATURE', 'MATH']))).toHaveLength(0);
+  it('accepts student with mandatory subject', () => {
+    expect(validateMandatory(new Set(['MATH']))).toHaveLength(0);
   });
 });
 
 describe('Exam master workbook structure', () => {
-  it('builds student sheet with 11 X columns', async () => {
+  it('builds student sheet with 10 X columns', async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('DanhSachThiSinh');
     const headers = ['Họ tên', 'SBD', 'Lớp', 'Ngày sinh', 'Giới tính', ...TN_THPT_SUBJECTS.map((s) => s.nameVi), 'Ghi chú'];
@@ -76,7 +75,7 @@ describe('Exam master workbook structure', () => {
       if (code) subjectCols.set(header, code);
     });
 
-    expect(subjectCols.size).toBe(11);
+    expect(subjectCols.size).toBe(10);
 
     const values: Record<string, string> = {};
     headerMap.forEach((header, col) => {
@@ -87,8 +86,7 @@ describe('Exam master workbook structure', () => {
     for (const [header, code] of subjectCols) {
       if (isMarkedXForTest(values[header] ?? '')) subjects.add(code);
     }
-    expect(subjects.size).toBe(2);
-    expect(subjects.has('LITERATURE')).toBe(true);
+    expect(subjects.size).toBe(1);
     expect(subjects.has('MATH')).toBe(true);
   });
 

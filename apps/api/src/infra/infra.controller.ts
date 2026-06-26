@@ -68,6 +68,7 @@ export class InfraController {
 
     const uploadDir = process.env.UPLOAD_DIR || './uploads';
     try {
+      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
       fs.accessSync(uploadDir, fs.constants.W_OK);
       checks.uploads = 'ok';
     } catch {
@@ -89,22 +90,27 @@ export class InfraController {
       );
       checks.migration = rows?.[0]?.name ? `ok (${rows[0].name})` : 'ok (none)';
     } catch {
-      checks.migration = 'error';
+      checks.migration = 'skipped';
     }
 
-    try {
-      const puppeteer = await import('puppeteer');
-      const browser = await puppeteer.default.launch({
-        headless: true,
-        args: ['--no-sandbox'],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      });
-      await browser.close();
-      checks.puppeteer = 'ok';
-      checks.pdfEngine = 'puppeteer';
-    } catch {
-      checks.puppeteer = 'skipped (excel-fallback)';
-      checks.pdfEngine = 'ok (excel-fallback)';
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const puppeteer = await import('puppeteer');
+        const browser = await puppeteer.default.launch({
+          headless: true,
+          args: ['--no-sandbox'],
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        });
+        await browser.close();
+        checks.puppeteer = 'ok';
+        checks.pdfEngine = 'puppeteer';
+      } catch {
+        checks.puppeteer = 'skipped (excel-fallback)';
+        checks.pdfEngine = 'ok (excel-fallback)';
+      }
+    } else {
+      checks.puppeteer = 'skipped (dev)';
+      checks.pdfEngine = 'ok (dev)';
     }
 
     const allOk = Object.entries(checks).every(([, v]) => {

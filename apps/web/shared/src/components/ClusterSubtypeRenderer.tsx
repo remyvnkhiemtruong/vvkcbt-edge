@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { RichTextContent } from './RichTextContent';
+import { splitPassageGaps } from '../utils/rich-text-parser';
 
 type ClusterSubtype =
   | 'fill_notice'
@@ -47,8 +48,58 @@ function McqOptions({
               disabled={readOnly}
               onChange={() => onChange(key)}
             />
-            {opt}
+            <RichTextContent content={opt} />
           </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function GapPassage({
+  text,
+  options,
+  answer,
+  onChange,
+  readOnly,
+  className,
+}: {
+  text: string;
+  options: string[];
+  answer: unknown;
+  onChange: (a: unknown) => void;
+  readOnly?: boolean;
+  className?: string;
+}) {
+  const segments = splitPassageGaps(text);
+  return (
+    <div className={`passage cluster-passage ${className ?? ''}`}>
+      {segments.map((seg, i) => {
+        if (seg.kind === 'gap') {
+          const gapKey = `g${seg.gapIndex}`;
+          return (
+            <select
+              key={`gap-${i}`}
+              disabled={readOnly}
+              className="cluster-gap-select"
+              value={(answer as Record<string, string>)?.[gapKey] ?? ''}
+              onChange={(e) =>
+                onChange({ ...(answer as Record<string, string>), [gapKey]: e.target.value })
+              }
+            >
+              <option value="">--</option>
+              {options.map((o) => (
+                <option key={o} value={o.charAt(0)}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          );
+        }
+        return (
+          <Fragment key={`t-${i}`}>
+            <RichTextContent content={seg.value} />
+          </Fragment>
         );
       })}
     </div>
@@ -86,54 +137,46 @@ export function ClusterSubtypeRenderer({
           </div>
         )}
         <p className="cluster-hint">Sắp xếp các mục theo đúng thứ tự (dùng nút ↑↓):</p>
-        <ol>
+        <ol className="cluster-reorder__list">
           {order.map((opt, i) => (
-            <li key={opt} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ flex: 1 }}>{opt}</span>
+            <li key={`${opt}-${i}`} className="cluster-reorder__item">
+              <span className="cluster-reorder__text">
+                <RichTextContent content={opt} />
+              </span>
               <button type="button" className="cbt-btn cbt-btn-outline" disabled={readOnly} onClick={() => move(i, i - 1)}>↑</button>
               <button type="button" className="cbt-btn cbt-btn-outline" disabled={readOnly} onClick={() => move(i, i + 1)}>↓</button>
             </li>
           ))}
         </ol>
-        <McqOptions
-          options={options}
-          answer={answer}
-          onChange={onChange}
-          questionId={questionId}
-          readOnly={readOnly}
-        />
       </div>
     );
   }
 
   if (subtype === 'fill_gap' || subtype === 'fill_notice' || subtype === 'fill_flyer') {
-    const gaps = (passage || stem || '').split(/(\{\{\d+\}\}|___+)/);
+    const passageText = passage || stem || '';
+    const layoutClass =
+      subtype === 'fill_notice'
+        ? 'cluster-fill_notice-layout'
+        : subtype === 'fill_flyer'
+          ? 'cluster-fill_flyer-layout'
+          : 'cluster-fill_gap-layout';
+
     return (
       <div className={`cluster-${subtype}`}>
-        <div className="passage cluster-passage">
-          {gaps.map((part, i) =>
-            /^\{\{\d+\}\}$|___+/.test(part) ? (
-              <select
-                key={i}
-                disabled={readOnly}
-                value={(answer as Record<string, string>)?.[`g${i}`] ?? ''}
-                onChange={(e) =>
-                  onChange({ ...(answer as Record<string, string>), [`g${i}`]: e.target.value })
-                }
-                style={{ margin: '0 4px' }}
-              >
-                <option value="">--</option>
-                {options.map((o) => (
-                  <option key={o} value={o.charAt(0)}>{o}</option>
-                ))}
-              </select>
-            ) : (
-              <span key={i}>{part}</span>
-            ),
-          )}
-        </div>
-        {stem && <div className="stem"><RichTextContent content={stem} /></div>}
-        <McqOptions options={options} answer={answer} onChange={onChange} questionId={questionId} />
+        <GapPassage
+          text={passageText}
+          options={options}
+          answer={answer}
+          onChange={onChange}
+          readOnly={readOnly}
+          className={layoutClass}
+        />
+        {stem && passage && (
+          <div className="stem">
+            <RichTextContent content={stem} />
+          </div>
+        )}
+        <McqOptions options={options} answer={answer} onChange={onChange} questionId={questionId} readOnly={readOnly} />
       </div>
     );
   }
@@ -150,7 +193,7 @@ export function ClusterSubtypeRenderer({
           <RichTextContent content={stem} />
         </div>
       )}
-      <McqOptions options={options} answer={answer} onChange={onChange} questionId={questionId} />
+      <McqOptions options={options} answer={answer} onChange={onChange} questionId={questionId} readOnly={readOnly} />
     </div>
   );
 }

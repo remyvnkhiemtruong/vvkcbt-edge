@@ -115,7 +115,6 @@ export interface SubmitResult {
   total: number;
   breakdown: ScoreBreakdownItem[];
   partScores?: PartScoreSummary;
-  pendingManual?: boolean;
   subject?: string;
   hasMoreSlots?: boolean;
   serverNow?: string;
@@ -124,12 +123,18 @@ export interface SubmitResult {
   examAccount?: string;
 }
 
+/** Tên trường mặc định — đồng bộ UI, biên bản, seed, Composer. */
+export const DEFAULT_SCHOOL_NAME = 'THPT Võ Văn Kiệt';
+export const DEFAULT_SCHOOL_CODE = 'VVK001';
+
 export * from './scoring';
+export * from './informatics-branch';
 export * from './routing';
 export * from './exam-structure';
 export * from './tn-thpt-catalog';
 export { TN_THPT_SUBJECTS, listTnThptSubjects, getSubjectMeta } from './tn-thpt-catalog';
 export * from './exam-package';
+export * from './question-content';
 export * from './blueprint-validator';
 export {
   BLUEPRINT_FIXTURES,

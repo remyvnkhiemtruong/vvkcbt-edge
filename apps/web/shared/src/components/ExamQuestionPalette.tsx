@@ -1,4 +1,4 @@
-import { buildExamParts, findPartIndex, isQuestionAnswered } from '../utils/exam-clusters';
+import { buildExamParts, buildViewGroups, findPartIndex, findViewGroupIndex, isQuestionAnswered } from '../utils/exam-clusters';
 import type { ExamQuestion } from './ExamViewShell';
 
 interface ExamQuestionPaletteProps {
@@ -17,7 +17,9 @@ export function ExamQuestionPalette({
   partOrder,
 }: ExamQuestionPaletteProps) {
   const parts = buildExamParts(questions, partOrder);
+  const viewGroups = buildViewGroups(questions);
   const activePartIdx = findPartIndex(parts, currentIdx);
+  const activeGroup = viewGroups[findViewGroupIndex(viewGroups, currentIdx)];
 
   return (
     <nav className="exam-palette" aria-label="Điều hướng câu hỏi">
@@ -28,6 +30,7 @@ export function ExamQuestionPalette({
             {questions.slice(part.start, part.end + 1).map((q, j) => {
               const i = part.start + j;
               const inPart = activePartIdx === pi;
+              const inViewGroup = activeGroup && i >= activeGroup.start && i <= activeGroup.end;
               const answered = isQuestionAnswered(answers[q.id]);
               const isCurrent = i === currentIdx;
               return (
@@ -37,6 +40,7 @@ export function ExamQuestionPalette({
                   className={[
                     'exam-palette__btn',
                     inPart ? 'in-part' : '',
+                    inViewGroup ? 'in-cluster' : '',
                     isCurrent ? 'is-current' : '',
                     answered ? 'is-answered' : '',
                   ]

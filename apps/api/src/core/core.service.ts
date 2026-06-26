@@ -182,7 +182,6 @@ export class CoreService {
       cognitive_distribution: { nhan_biet: 0.4, thong_hieu: 0.3, van_dung: 0.3 },
       subjects: [
         { code: 'MATH', weight: 3, structureMode: 'default', ui_mode: 'vertical_focus' },
-        { code: 'LITERATURE', weight: 2, structureMode: 'default', ui_mode: 'split_view' },
       ],
       scoring: {
         true_false_branch: { '1': 0.1, '2': 0.25, '3': 0.5, '4': 1.0 },

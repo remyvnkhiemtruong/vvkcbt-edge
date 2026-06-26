@@ -16,12 +16,11 @@ describe('Exam package manifest', () => {
     expect(EXAM_PACKAGE_FORMAT_VERSION).toBe('1.2');
   });
 
-  it('requires LITERATURE and MATH in student subjects', () => {
-    const validate = (subjects: string[]) =>
-      subjects.includes('LITERATURE') && subjects.includes('MATH');
+  it('requires MATH in student subjects', () => {
+    const validate = (subjects: string[]) => subjects.includes('MATH');
 
-    expect(validate(['LITERATURE', 'MATH'])).toBe(true);
-    expect(validate(['MATH', 'ENGLISH'])).toBe(false);
+    expect(validate(['MATH'])).toBe(true);
+    expect(validate(['ENGLISH'])).toBe(false);
   });
 });
 
@@ -76,7 +75,7 @@ describe('Exam package ZIP structure', () => {
           fullName: 'Nguyễn Văn A',
           studentCode: 'HS001',
           className: '12A1',
-          subjects: ['LITERATURE', 'MATH'],
+          subjects: ['MATH'],
         },
       ]),
     );

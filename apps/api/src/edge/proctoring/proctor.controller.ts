@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, BadRequestException, StreamableFile, Res } from '@nestjs/common';
-import { Response } from 'express';
+import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, BadRequestException, StreamableFile, Res, Req } from '@nestjs/common';
+import { Response, Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -8,7 +8,7 @@ import { ExamSession } from '../../database/entities/exam-session.entity';
 import { StudentSubjectSlot } from '../../database/entities/student-subject-slot.entity';
 import { ProctoringGateway } from './proctoring.gateway';
 import { ProctorActionType, StudentSessionStatus } from '@vnu/shared-types';
-import { StaffAuthGuard, StaffRoles } from '../../shared/guards/staff-auth.guard';
+import { StaffAuthGuard, StaffRoles, StaffJwtPayload } from '../../shared/guards/staff-auth.guard';
 import { ExamPackageService } from '../../core/exam-package/exam-package.service';
 import { SessionSchedulerService } from '../../core/scheduling/session-scheduler.service';
 import { ExamMasterService } from '../../core/exam-master/exam-master.service';
@@ -80,8 +80,6 @@ export class ProctorController {
     @Query('format') format?: 'pdf' | 'xlsx',
     @Query('proctor1Name') proctor1Name?: string,
     @Query('proctor2Name') proctor2Name?: string,
-    @Query('signature1') signature1?: string,
-    @Query('signature2') signature2?: string,
   ) {
     if (!subjectCode?.trim()) throw new BadRequestException('Thiếu subjectCode');
     const roomName = room?.trim() || process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
@@ -92,8 +90,6 @@ export class ProctorController {
       format: fmt,
       proctor1Name,
       proctor2Name,
-      signature1,
-      signature2,
     });
     if (result.pdfFallback) {
       res.setHeader('X-Pdf-Fallback', 'excel');
@@ -137,6 +133,7 @@ export class ProctorController {
 
   @Post('action')
   async action(
+    @Req() req: Request & { staffPayload?: StaffJwtPayload },
     @Body()
     body: {
       examSessionId: string;
@@ -145,7 +142,10 @@ export class ProctorController {
       payload?: Record<string, unknown>;
     },
   ) {
-    await this.gateway.proctorAction(null as never, body);
+    await this.gateway.proctorAction(null as never, {
+      ...body,
+      performedBy: req.staffPayload?.sub,
+    });
     return { ok: true };
   }
 
@@ -167,7 +167,12 @@ export class ProctorController {
   @UseInterceptors(FileInterceptor('file'))
   async importPackage(@UploadedFile() file: Express.Multer.File) {
     if (!file?.buffer) throw new BadRequestException('Thiếu file ZIP');
-    return this.packageService.importZip(file.buffer);
+    const result = await this.packageService.importZip(file.buffer);
+    this.gateway.broadcastForceLogout('exam_imported');
+    if (result.examSessionId) {
+      this.gateway.broadcastScheduleUpdate(result.examSessionId, { reason: 'slots_batch' });
+    }
+    return result;
   }
 
   @Post('packages/dry-run')
@@ -224,8 +229,6 @@ export class ProctorController {
     @Query('room') room?: string,
     @Query('proctor1Name') proctor1Name?: string,
     @Query('proctor2Name') proctor2Name?: string,
-    @Query('signature1') signature1?: string,
-    @Query('signature2') signature2?: string,
   ) {
     const slots = await this.slotRepo.find({ where: { examSessionId }, take: 1 });
     const subjectCode = slots[0]?.subjectCode;
@@ -233,8 +236,6 @@ export class ProctorController {
       room,
       proctor1Name,
       proctor2Name,
-      signature1,
-      signature2,
     });
     const filename = this.roomArchiveService.exportFilename(examSessionId, subjectCode);
     res.setHeader('Content-Type', 'application/zip');
@@ -259,41 +260,6 @@ export class ProctorController {
   @Post('slots/:slotId/open-early')
   async openSlotEarly(@Param('slotId') slotId: string) {
     return this.slotScheduler.openEarly(slotId);
-  }
-
-  @Get('sessions/:examSessionId/subject-schedule')
-  async subjectSchedule(@Param('examSessionId') examSessionId: string) {
-    const slots = await this.slotRepo.find({
-      where: { examSessionId },
-      order: { scheduledStart: 'ASC' },
-    });
-    const bySubject = new Map<string, { subjectCode: string; scheduledStart: Date; scheduledEnd: Date; status: string; slotId: string; openCount: number; total: number }>();
-    for (const slot of slots) {
-      const key = slot.subjectCode;
-      const cur = bySubject.get(key) ?? {
-        subjectCode: key,
-        scheduledStart: slot.scheduledStart,
-        scheduledEnd: slot.scheduledEnd,
-        status: slot.status,
-        slotId: slot.id,
-        openCount: 0,
-        total: 0,
-      };
-      cur.total += 1;
-      if (slot.status === 'open' || slot.status === 'completed') cur.openCount += 1;
-      if (slot.scheduledStart < cur.scheduledStart) {
-        cur.scheduledStart = slot.scheduledStart;
-        cur.slotId = slot.id;
-      }
-      if (slot.scheduledEnd > cur.scheduledEnd) cur.scheduledEnd = slot.scheduledEnd;
-      if (slot.status === 'open') cur.status = 'open';
-      else if (slot.status === 'scheduled' && cur.status !== 'open') cur.status = 'scheduled';
-      bySubject.set(key, cur);
-    }
-    return {
-      serverTime: new Date().toISOString(),
-      subjects: [...bySubject.values()],
-    };
   }
 
   @Post('slots/:slotId/extend')

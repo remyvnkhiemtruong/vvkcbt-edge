@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { scoreAnswer, ExamRules } from '@vnu/shared-types';
+import { scoreExamPaper, scoreAnswer, ExamRules } from '@vnu/shared-types';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GradingFlag } from '../../database/entities/grading-flag.entity';
@@ -14,6 +14,7 @@ export interface PaperQuestion {
   maxScore?: number;
   bankQuestionId?: string;
   partKey?: string;
+  part?: string;
 }
 
 @Injectable()
@@ -30,41 +31,43 @@ export class ScoringService {
   scoreExam(
     questions: PaperQuestion[],
     answers: Record<string, unknown>,
-    rules: ExamRules,
-    studentSessionId: string,
+    rules: ExamRules | null | undefined,
+    _studentSessionId: string,
+    subjectCode?: string,
   ) {
-    const breakdown = questions.map((q) => {
-      const result = scoreAnswer(
-        { id: q.id, type: q.type, correctKey: q.correctKey, maxScore: q.maxScore },
-        answers[q.id],
-        rules.scoring,
-      );
-      return {
-        questionId: q.id,
+    const result = scoreExamPaper(
+      questions.map((q) => ({
+        id: q.id,
         type: q.type,
-        score: result.score,
-        maxScore: result.maxScore,
-        flagged: result.flagged,
-      };
-    });
+        correctKey: q.correctKey,
+        maxScore: q.maxScore,
+        part: q.partKey ?? q.part,
+      })),
+      answers,
+      rules?.scoring,
+      { subjectCode },
+    );
 
-    const total = breakdown.reduce((sum, b) => sum + b.score, 0);
-
-    return { total, breakdown };
+    return {
+      total: result.total,
+      breakdown: result.breakdown,
+      informaticsBranchInvalid: result.informaticsBranchInvalid,
+    };
   }
 
   async createGradingFlags(
     studentSessionId: string,
     breakdown: Array<{ questionId: string; flagged?: boolean }>,
-    answers: Record<string, unknown>,
+    answers: Record<string, unknown> | null | undefined,
   ) {
+    const safeAnswers = answers ?? {};
     const flagged = breakdown.filter((b) => b.flagged);
     for (const item of flagged) {
       await this.gradingFlagRepo.save(
         this.gradingFlagRepo.create({
           studentSessionId,
           questionId: item.questionId,
-          studentAnswer: String(answers[item.questionId] ?? ''),
+          studentAnswer: String(safeAnswers[item.questionId] ?? ''),
           reason: 'format_mismatch',
           status: 'pending',
         }),

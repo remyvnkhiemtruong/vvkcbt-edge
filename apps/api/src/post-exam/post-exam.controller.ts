@@ -88,13 +88,6 @@ export class PostExamController {
   @Get('audit/:examSessionId')
   @StaffRoles('admin', 'proctor')
   async getAudit(@Param('examSessionId') examSessionId: string) {
-    const logs = await this.auditService.findBySession(examSessionId);
-    return logs.map((l) => ({
-      id: l.id,
-      eventType: l.eventType,
-      detail: JSON.stringify(l.payload ?? {}),
-      clientIp: l.ip,
-      createdAt: l.createdAt,
-    }));
+    return this.auditService.findEnrichedBySession(examSessionId);
   }
 }

@@ -9,6 +9,7 @@ import { Student } from '../../database/entities/student.entity';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
 import { TnptComboCatalog } from '../../database/entities/tnpt-combo-catalog.entity';
+import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
 
 export interface ScheduleRow {
   id: string;
@@ -49,7 +50,7 @@ export class SessionSchedulerService {
   }
 
   private schoolName(): string {
-    return process.env.SCHOOL_NAME || process.env.VITE_SCHOOL_NAME || 'THPT Võ Văn Kiệt';
+    return process.env.SCHOOL_NAME || process.env.VITE_SCHOOL_NAME || DEFAULT_SCHOOL_NAME;
   }
 
   async scheduleSession(examSessionId: string, studentIds?: string[]): Promise<ScheduleRow[]> {

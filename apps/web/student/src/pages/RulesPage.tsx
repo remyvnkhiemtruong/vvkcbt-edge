@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CbtCard, SCHOOL_NAME, vi, isProductionUi, isRunningInSEB, requiresSebLock } from '@shared/index';
+import { CbtCard, vi, isProductionUi, isRunningInSEB, requiresSebLock } from '@shared/index';
 
 interface Props {
   onAccepted: () => void;
@@ -163,12 +163,11 @@ export default function RulesPage({ onAccepted }: Props) {
           </>
         )}
       </CbtCard>
-      <footer className="rules-page__footer">
-        <span>
-          {SCHOOL_NAME} — {production ? vi.footerPublic : vi.footerDoc}
-        </span>
-        {!production && <span>Trang 2/24</span>}
-      </footer>
+      {!production && (
+        <footer className="rules-page__footer">
+          <span>Trang 2/24</span>
+        </footer>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ interface UseProctorSocketOptions {
   onSubjectRoomComplete?: (data: SubjectRoomCompleteData) => void;
   onCheatingAlert?: (data: { sbd: string; violations: number }) => void;
   onHelpAlert?: (data: { sbd: string; reason?: string }) => void;
+  onScheduleUpdate?: () => void;
   onConnectedChange?: (connected: boolean) => void;
   onSessionExpired?: () => void;
 }
@@ -33,6 +34,7 @@ export function useProctorSocket({
   onSubjectRoomComplete,
   onCheatingAlert,
   onHelpAlert,
+  onScheduleUpdate,
   onConnectedChange,
   onSessionExpired,
 }: UseProctorSocketOptions) {
@@ -43,6 +45,7 @@ export function useProctorSocket({
     onSubjectRoomComplete,
     onCheatingAlert,
     onHelpAlert,
+    onScheduleUpdate,
     onConnectedChange,
     onSessionExpired,
   });
@@ -52,6 +55,7 @@ export function useProctorSocket({
     onSubjectRoomComplete,
     onCheatingAlert,
     onHelpAlert,
+    onScheduleUpdate,
     onConnectedChange,
     onSessionExpired,
   };
@@ -79,6 +83,9 @@ export function useProctorSocket({
     });
     socket.on('help_alert', (data: { sbd: string; reason?: string }) => {
       callbacksRef.current.onHelpAlert?.(data);
+    });
+    socket.on('schedule_update', () => {
+      callbacksRef.current.onScheduleUpdate?.();
     });
 
     const gridQs = monitorSubject ? `?subjectCode=${encodeURIComponent(monitorSubject)}` : '';

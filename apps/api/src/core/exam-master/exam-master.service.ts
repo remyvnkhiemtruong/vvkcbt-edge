@@ -12,6 +12,8 @@ import {
   ExamType,
   ExamRules,
   getSubjectNameVi,
+  DEFAULT_SCHOOL_NAME,
+  DEFAULT_SCHOOL_CODE,
 } from '@vnu/shared-types';
 import { ExamSession } from '../../database/entities/exam-session.entity';
 import { Student } from '../../database/entities/student.entity';
@@ -319,7 +321,7 @@ export class ExamMasterService {
       ['TenKyThi', session.name],
       ['CheDoDinhTuyen', session.routingMode],
       ['TrangThai', session.status],
-      ['TenTruong', process.env.SCHOOL_NAME ?? 'THPT Demo VNU'],
+      ['TenTruong', process.env.SCHOOL_NAME ?? DEFAULT_SCHOOL_NAME],
       ['PhongThi', process.env.EDGE_ROOM_NAME ?? 'Phòng máy số 1'],
       ['SucChuaPhong', Number(process.env.EDGE_ROOM_CAPACITY ?? 30)],
       ['SoLanViPhamFocus', proctoring.max_focus_violations],
@@ -531,7 +533,7 @@ export class ExamMasterService {
     sheet.addRow([]);
     sheet.addRow(['1. Sheet CauHinhKyThi: cấu hình ca thi và lịch từng môn (11 môn TN THPT).']);
     sheet.addRow(['2. Sheet DanhSachThiSinh: Họ tên, SBD, Lớp, Ngày sinh, Giới tính + X ở cột môn.']);
-    sheet.addRow(['3. Bắt buộc: mọi thí sinh phải có X ở Ngữ văn và Toán.']);
+    sheet.addRow(['3. Bắt buộc: mọi thí sinh phải có X ở Toán.']);
     sheet.addRow(['4. Giá trị đăng ký hợp lệ: X, x, 1, ✓']);
     sheet.addRow(['5. Sheet KetQua chỉ xuất hiện khi xuất file sau thi — không import.']);
     sheet.addRow([]);
@@ -716,7 +718,7 @@ export class ExamMasterService {
     let school = await this.schoolRepo.findOne({ where: {}, order: { createdAt: 'ASC' } });
     if (!school) {
       school = await this.schoolRepo.save(
-        this.schoolRepo.create({ name: 'THPT Demo VNU', code: 'VNU001' }),
+        this.schoolRepo.create({ name: DEFAULT_SCHOOL_NAME, code: DEFAULT_SCHOOL_CODE }),
       );
     }
     return school;

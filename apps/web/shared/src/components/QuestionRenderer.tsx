@@ -1,5 +1,9 @@
 import { RichTextContent } from './RichTextContent';
 import { ClusterSubtypeRenderer } from './ClusterSubtypeRenderer';
+import { TrueFalseRenderer } from './TrueFalseRenderer';
+import { ShortAnswerRenderer } from './ShortAnswerRenderer';
+import { InformaticsCodeRenderer } from './InformaticsCodeRenderer';
+import type { InformaticsCodeBlock } from '@vnu/shared-types';
 
 interface Question {
   id: string;
@@ -14,6 +18,8 @@ interface Question {
     options?: string[];
     statements?: string[];
     subtype?: string;
+    codeBlocks?: InformaticsCodeBlock[];
+    codeDisplay?: 'tabs' | 'side_by_side';
   };
   passage?: { title?: string; body?: string };
 }
@@ -24,6 +30,7 @@ interface Props {
   onChange: (answer: unknown) => void;
   onClick?: () => void;
   hideClusterPassage?: boolean;
+  hideStem?: boolean;
   readOnly?: boolean;
 }
 
@@ -38,6 +45,7 @@ export function QuestionRenderer({
   onChange,
   onClick,
   hideClusterPassage = false,
+  hideStem = false,
   readOnly = false,
 }: Props) {
   const { content, type } = question;
@@ -46,6 +54,8 @@ export function QuestionRenderer({
     question.passage?.body ||
     (content.body as string | undefined);
   const disabled = readOnly;
+  const codeBlocks = content.codeBlocks;
+  const codeDisplay = content.codeDisplay;
 
   return (
     <div className="question" onClick={onClick}>
@@ -54,7 +64,12 @@ export function QuestionRenderer({
           <RichTextContent content={passageText} />
         </div>
       )}
-      <div className="stem">{type !== 'cluster_mcq' ? renderStem(content.stem) : null}</div>
+      {codeBlocks?.length ? (
+        <InformaticsCodeRenderer codeBlocks={codeBlocks} codeDisplay={codeDisplay} />
+      ) : null}
+      <div className="stem">
+        {type !== 'cluster_mcq' && !hideStem ? renderStem(content.stem) : null}
+      </div>
 
       {type === 'cluster_mcq' && content.options && (
         <ClusterSubtypeRenderer
@@ -82,7 +97,7 @@ export function QuestionRenderer({
                   disabled={disabled}
                   onChange={() => onChange(key)}
                 />
-                {opt}
+                <RichTextContent content={opt} />
               </label>
             );
           })}
@@ -90,39 +105,20 @@ export function QuestionRenderer({
       )}
 
       {type === 'true_false' && content.statements && (
-        <div className="true-false">
-          {content.statements.map((stmt, i) => {
-            const arr = (answer as boolean[]) || [false, false, false, false];
-            return (
-              <label key={i}>
-                <span>{stmt}</span>
-                <select
-                  disabled={disabled}
-                  value={arr[i] === true ? 'true' : arr[i] === false ? 'false' : ''}
-                  onChange={(e) => {
-                    const next = [...arr];
-                    next[i] = e.target.value === 'true';
-                    onChange(next);
-                  }}
-                >
-                  <option value="">--</option>
-                  <option value="true">Đúng</option>
-                  <option value="false">Sai</option>
-                </select>
-              </label>
-            );
-          })}
-        </div>
+        <TrueFalseRenderer
+          statements={content.statements}
+          answer={answer}
+          onChange={onChange}
+          readOnly={disabled}
+        />
       )}
 
       {type === 'short_answer' && (
-        <input
-          type="text"
-          className="short-answer"
-          value={(answer as string) || ''}
+        <ShortAnswerRenderer
+          answer={answer}
+          onChange={onChange}
           readOnly={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Nhập đáp án..."
+          inputId={`short-answer-${question.id}`}
         />
       )}
 

@@ -17,7 +17,7 @@ export function resolveQuestionPartKey(q: { part?: string; partKey?: string }): 
 
 type PartCfg = { type?: string; count?: number };
 
-/** Gán phần từ loại câu khi thiếu part; hỗ trợ nhiều phần cùng type (Văn, Tin). */
+/** Gán phần từ loại câu khi thiếu part; hỗ trợ nhiều phần cùng type. */
 export function enrichQuestionsWithPart<T extends { type?: string; part?: string; partKey?: string }>(
   questions: T[],
   structure?: { parts: Record<string, PartCfg> },

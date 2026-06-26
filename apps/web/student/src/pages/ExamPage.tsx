@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   AudioPlayer,
   GracePeriodOverlay,
@@ -9,7 +9,6 @@ import {
   useExamTheme,
   vi,
   isRunningInSEB,
-  getSubjectNameVi,
   buildExamParts,
   findPartIndex,
   countAnswered,
@@ -17,7 +16,8 @@ import {
   type ExamUiMode,
   ApiStatusBanner,
 } from '@shared/index';
-import { createSocket } from '@shared/socket';
+import { patchInformaticsAnswers } from '@vnu/shared-types';
+import { getStudentSocket } from '../hooks/useStudentSocket';
 import { useExamStore } from '../store';
 import { studentApi } from '../api';
 import { useFocusGuard } from '../hooks/useFocusGuard';
@@ -37,12 +37,11 @@ function formatTimer(sec: number): string {
 }
 
 export default function ExamPage() {
-  const { exam, answers, locked, setExam, setAnswer, setLocked, sessionId, sbd, examAccount } =
+  const { exam, answers, locked, setExam, setAnswer, setAnswers, setLocked, sessionId, sbd, examAccount } =
     useExamStore();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [remainingSec, setRemainingSec] = useState(5400);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
   const [uiOverride, setUiOverride] = useState<ExamUiMode | null>(null);
   const [fontScaleIdx, setFontScaleIdx] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -85,21 +84,26 @@ export default function ExamPage() {
   }, [loadExam]);
 
   useEffect(() => {
-    const token = localStorage.getItem('vnu_token');
-    const socket = createSocket('/proctoring', token ?? undefined);
-    socketRef.current = socket;
-    if (sessionId) socket.emit('join_student', { sessionId });
+    const socket = getStudentSocket();
+    if (!socket || !sessionId) return;
 
-    socket.on('force_lock', () => setLocked(true));
-    socket.on('force_submit', () => confirmSubmitExam());
-    socket.on('time_extend', (data: { minutes: number }) => {
+    socket.emit('join_student', { sessionId });
+
+    const onForceLock = () => setLocked(true);
+    const onForceSubmit = () => confirmSubmitExam();
+    const onTimeExtend = (data: { minutes: number }) => {
       setRemainingSec((s) => s + (data.minutes ?? 5) * 60);
-    });
-    socket.on('reset_session', () => {
+    };
+    const onResetSession = () => {
       useExamStore.getState().setAnswers({});
       setLocked(false);
       loadExam();
-    });
+    };
+
+    socket.on('force_lock', onForceLock);
+    socket.on('force_submit', onForceSubmit);
+    socket.on('time_extend', onTimeExtend);
+    socket.on('reset_session', onResetSession);
 
     const hb = setInterval(() => {
       studentApi.heartbeat().catch(() => {});
@@ -108,8 +112,10 @@ export default function ExamPage() {
 
     return () => {
       clearInterval(hb);
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off('force_lock', onForceLock);
+      socket.off('force_submit', onForceSubmit);
+      socket.off('time_extend', onTimeExtend);
+      socket.off('reset_session', onResetSession);
     };
   }, [sessionId, setLocked, loadExam, confirmSubmitExam]);
 
@@ -117,7 +123,7 @@ export default function ExamPage() {
     if (locked || !exam) return;
     const sync = setInterval(() => {
       studentApi
-        .getExam()
+        .syncExam()
         .then((data) => {
           if (data.endsAt && data.serverNow) {
             const rem = Math.max(
@@ -154,8 +160,20 @@ export default function ExamPage() {
       ?.structureTemplate?.parts;
     return parts ? Object.keys(parts) : undefined;
   }, [exam?.rules]);
-  const parts = useMemo(() => buildExamParts(questions, partOrder), [questions, partOrder]);
+  const parts = useMemo(
+    () => buildExamParts(questions, partOrder, (exam?.subject as string) || undefined),
+    [questions, partOrder, exam?.subject],
+  );
   const answeredStats = useMemo(() => countAnswered(questions, answers), [questions, answers]);
+
+  const subjectCode = (exam?.subject as string) || '';
+  const handleAnswerChange = useCallback(
+    (questionId: string, value: unknown) => {
+      const next = patchInformaticsAnswers(questions, answers, questionId, value, subjectCode);
+      setAnswers(next);
+    },
+    [questions, answers, subjectCode, setAnswers],
+  );
 
   const scrollToQuestion = useCallback((idx: number) => {
     requestAnimationFrame(() => {
@@ -203,6 +221,15 @@ export default function ExamPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!exam || confirmSubmit) return;
+      const el = e.target as HTMLElement;
+      if (
+        el.tagName === 'INPUT' ||
+        el.tagName === 'TEXTAREA' ||
+        el.tagName === 'SELECT' ||
+        el.isContentEditable
+      ) {
+        return;
+      }
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'j') {
         goQuestion(1);
         e.preventDefault();
@@ -211,17 +238,10 @@ export default function ExamPage() {
         goQuestion(-1);
         e.preventDefault();
       }
-      if (e.key >= '1' && e.key <= '9') {
-        const idx = parseInt(e.key, 10) - 1;
-        if (idx < questions.length) {
-          setCurrentIdx(idx);
-          scrollToQuestion(idx);
-        }
-      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exam, questions.length, goQuestion, confirmSubmit, scrollToQuestion]);
+  }, [exam, goQuestion, confirmSubmit]);
 
   const audioQuestionRange = useMemo(() => {
     const indices: number[] = [];
@@ -285,10 +305,6 @@ export default function ExamPage() {
   }, [currentIdx, uiMode, exam]);
 
   if (!exam) return <div className="loading">{vi.exam.loading}</div>;
-  const subjectCode = (exam.subject as string) || '';
-  const subjectLabel = subjectCode
-    ? `ĐỀ ${getSubjectNameVi(subjectCode).toUpperCase()}`
-    : vi.exam.defaultTitle;
   const sessionName = (exam.sessionName as string) || '';
   const audioRules = (exam.rules as { audio?: { max_plays?: number } })?.audio;
   const maxViolations =
@@ -347,8 +363,8 @@ export default function ExamPage() {
           <div className="exam-topbar__brand">
             <CbtBrandLogo size={40} logoUrl="/student/branding/logo.png" />
             <div className="exam-topbar__subject-wrap">
-              <span className="exam-topbar__subject">{subjectLabel}</span>
-              <span className="exam-topbar__school">{vi.footerPublic}</span>
+              <span className="exam-topbar__subject">{vi.exam.headerDept}</span>
+              <span className="exam-topbar__school">{vi.exam.headerSchool}</span>
             </div>
           </div>
         </div>
@@ -478,7 +494,7 @@ export default function ExamPage() {
           onViewModeChange={(mode) => setUiOverride(mode)}
           currentIdx={currentIdx}
           onCurrentIdxChange={setCurrentIdx}
-          onChange={(id, a) => setAnswer(id, a)}
+          onChange={handleAnswerChange}
           onQuestionClick={(i) => studentApi.auditClick(`q-${i}`).catch(() => {})}
           subjectCode={subjectCode}
           partOrder={partOrder}

@@ -133,4 +133,16 @@ export class BackupService {
     if (!fs.existsSync(this.backupDir)) return [];
     return fs.readdirSync(this.backupDir).filter((f) => f.endsWith('.zip') || f.endsWith('.zip.enc'));
   }
+
+  resolveBackupPath(filename: string): string {
+    const safe = path.basename(filename);
+    return path.join(this.backupDir, safe);
+  }
+
+  async importAndRestore(buffer: Buffer, originalName: string): Promise<{ message: string }> {
+    const safe = path.basename(originalName);
+    const dest = path.join(this.backupDir, safe);
+    fs.writeFileSync(dest, buffer);
+    return this.restoreBackup(safe);
+  }
 }

@@ -133,8 +133,13 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
     const payload = this.verifySocketToken(client, ['student']);
     const sessionId = payload.sessionId;
     if (!sessionId) throw new WsException('Missing sessionId in token');
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     this.studentSockets.set(sessionId, client.id);
     client.join(`student:${sessionId}`);
+    client.join('students:connected');
+    if (session?.examSessionId) {
+      client.join(`session:${session.examSessionId}`);
+    }
   }
 
   @SubscribeMessage('heartbeat')
@@ -200,6 +205,7 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       studentSessionId: string;
       action: ProctorActionType;
       payload?: Record<string, unknown>;
+      performedBy?: string;
     },
   ) {
     const session = await this.sessionRepo.findOne({ where: { id: data.studentSessionId } });
@@ -243,13 +249,44 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       eventType: AuditEventType.PROCTOR_ACTION,
       examSessionId: data.examSessionId,
       studentSessionId: data.studentSessionId,
-      payload: { action: data.action, ...data.payload },
+      payload: {
+        action: data.action,
+        sbd: session.sbd,
+        performedBy: data.performedBy,
+        ...data.payload,
+      },
     });
     await this.broadcastGrid(data.examSessionId);
   }
 
   private emitToStudent(sessionId: string, event: string, payload: unknown) {
     this.server.to(`student:${sessionId}`).emit(event, payload);
+  }
+
+  /** Đẩy mọi thí sinh đang kết nối về màn hình đăng nhập (sau import ca mới). */
+  broadcastForceLogout(reason = 'exam_session_replaced') {
+    this.studentSockets.clear();
+    this.server.to('students:connected').emit('force_logout', { reason });
+  }
+
+  /** Thông báo thay đổi lịch/ca thi (mở đề, khóa, gia hạn) tới giám thị + thí sinh trong ca. */
+  broadcastScheduleUpdate(
+    examSessionId: string,
+    payload: {
+      reason: 'slot_opened' | 'slot_locked' | 'slot_extended' | 'slots_batch';
+      slotId?: string;
+      subjectCode?: string;
+      status?: string;
+      scheduledEnd?: string;
+    },
+  ) {
+    const message = {
+      examSessionId,
+      serverTime: new Date().toISOString(),
+      ...payload,
+    };
+    this.server.to(`session:${examSessionId}`).emit('schedule_update', message);
+    void this.broadcastGrid(examSessionId);
   }
 
   async getGrid(examSessionId: string, options: ProctorGridOptions = {}) {
@@ -327,7 +364,6 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
         slotStatus: slot?.status,
         scoreTotal: typeof scoreResult?.total === 'number' ? scoreResult.total : undefined,
         partScores,
-        pendingManual: scoreResult?.pendingManual === true,
         submittedAt: slot?.submittedAt ?? s.submittedAt,
         manualOverride: scoreResult?.manualOverride === true,
       };
@@ -364,7 +400,6 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       part3: string | number;
       total: string | number;
       note?: string;
-      pendingManual?: boolean;
     }>;
     forced?: boolean;
   }) {

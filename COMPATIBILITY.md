@@ -16,7 +16,7 @@
 - **PIN**: 8 chữ số ngẫu nhiên
 - **Login**: Student uses **Tài khoản thi** (not SBD); SBD remains on slip/display
 - **release_mode**: `proctor_at_time` — proctor opens subject slots manually
-- **Submit result**: `partScores` (Phần I/II/III); Literature `pendingManual: true`
+- **Submit result**: `partScores` (Phần I/II/III)
 - **Branding**: `manifest.branding` + `media/branding/logo.png` in ZIP
 
 ### Excel import (Composer only)
@@ -28,7 +28,7 @@ Sheet `DanhSachThiSinh` with column aliases (see `vnu-composer/apps/web/src/exce
 | Họ tên, SBD, Lớp | `fullName`, `sbd`, `className` |
 | Ngày sinh, Giới tính | `dateOfBirth`, `gender` |
 | Cột môn (đánh dấu X) | `subjects[]` — **đúng một cột X / file** |
-| Môn trống (legacy `parseStudentsExcel`) | Mặc định Văn + Toán — **không dùng** trong luồng import môn |
+| Môn trống (legacy `parseStudentsExcel`) | Mặc định Toán — **không dùng** trong luồng import môn |
 
 `detectImportSubject()` bắt buộc đúng 1 cột môn có X; `resetComposerForSubject()` giữ roster SBD, xóa papers/credentials môn cũ khi chuyển môn. `kit-sync-check.mjs` kiểm tra marker `detectImportSubject`.
 
@@ -37,16 +37,14 @@ Sheet `DanhSachThiSinh` with column aliases (see `vnu-composer/apps/web/src/exce
 - Composer: lưu trong `students.json` + `credentials.json` để **in phiếu 10-up** (`printCredentialSlips.ts`).
 - Edge: **không** thêm cột Postgres cho DOB/gender; login và giám sát dùng **tài khoản 6 số** + SBD hiển thị.
 
-### Xuất USB niêm phong — một môn / một ZIP (luồng chính v1.2+)
+### Xuất USB — một môn / một ZIP (Composer)
 
-Composer setup **theo từng môn**: chọn môn → import DS → soạn/ghép đề → SBD & phiếu → **xuất đúng 1 ZIP** (`manifest.exportScope: single_subject`).
+Composer soạn **theo từng môn**: chọn môn → import DS → soạn đề → SBD & phiếu → xuất ZIP (`exportScope: single_subject`).
 
-- **Mỗi lần xuất USB** sinh **`packageId` mới** (`randomUUID`) — các môn **không** gộp ca trên Edge
-- Chỉ **SBD** (6 chữ số) giữ chung giữa các môn khi soạn trên Composer
-- Mỗi khung giờ: **một USB** — một môn — import rồi rút USB (niêm phong vật lý)
-- Edge: mỗi ZIP = **một ca thi độc lập**; import môn mới **xóa ca cũ** trên máy (nên xuất gói phòng thi trước nếu cần lưu kết quả)
-- Tên file: `exam-{packageId8}-{SUBJECT}-{YYYYMMDD}-{HHmm}.zip` (ví dụ `exam-a1b2c3d4-MATH-20260626-0730.zip`)
-- Xuất full / bulk nhiều môn: chỉ trong **Nâng cao** Composer (không dùng ngày thi)
+- **Không dùng tổ hợp môn** — mỗi thí sinh chỉ có đúng **một môn** trong `subjects[]` / `credentials.json`
+- **Cùng khung giờ**: import USB môn thứ hai (cùng ngày/giờ) trên Edge **gộp vào một ca**; thí sinh A thi Toán, thí sinh B thi Lý trong cùng giờ
+- **Khung giờ khác**: import sẽ **thay ca** (xác nhận trước; nên xuất gói phòng thi nếu cần lưu kết quả)
+- Gói `full` (Nâng cao Composer): nhiều môn trong một ZIP — tất cả môn phải **cùng khung giờ**
 
 Proctor: `GET /api/proctor/packages/status` — `needsImportConfirm` khi đã có ca; `GET /api/proctor/sessions/:id/room-archive` — gói ZIP lưu kết quả (tùy chọn).
 
@@ -58,12 +56,12 @@ node scripts/kit-sync-check.mjs
 
 ## Workflow ngày G
 
-1. **Composer:** Cấu hình ca → **lặp từng môn:** chọn môn → lịch → DS → đề → SBD/phiếu → **Xuất USB** (packageId mới mỗi ZIP) → niêm phong.
-2. **USB:** Mỗi USB một file ZIP một môn; ghi nhãn môn + giờ mở đề.
-3. **Proctor:** Đúng khung giờ — dry-run → import USB môn đó → thi + giám sát → (tùy chọn) xuất gói phòng thi → import USB môn tiếp theo.
-4. **Student:** Tài khoản môn + mật khẩu → chờ/mở đề → làm bài → kết quả theo phần.
+1. **Composer:** Cấu hình ca → **lặp từng môn** (không tổ hợp): chọn môn → lịch → DS (1 cột môn X) → đề → SBD/phiếu → Xuất USB.
+2. **USB:** Mỗi USB một môn; ghi nhãn môn + giờ mở đề.
+3. **Proctor:** Đúng khung giờ — dry-run → import USB từng môn (cùng giờ = gộp ca) → giám sát tất cả môn trong ca → kết thúc từng môn / biên bản.
+4. **Student:** Tài khoản môn + PIN → làm bài **một môn** → kết quả.
 
-## 11 môn TN THPT QĐ764
+## 10 môn TN THPT QĐ764
 
 All subjects validated by `validateSubjectBlueprint` in `@vnu/shared-types`.
 
@@ -105,8 +103,26 @@ node scripts/kit-sync-check.mjs
 
 Sau khi sửa giao diện làm bài, đồng bộ các file sau từ VNU Edge → `vnu-composer/packages/web-shared/` và `packages/shared-types/`:
 
-- `question-order.ts`, `tn-thpt-catalog.ts`, `exam-structure.ts`
-- `exam-clusters.ts`, `ExamViewShell.tsx`, `ExamQuestionPalette.tsx`, `QuestionRenderer.tsx`
+- `question-order.ts`, `tn-thpt-catalog.ts`, `exam-structure.ts`, `question-content.ts`, `exam-package.ts`, `blueprint-validator.ts`
+- `exam-clusters.ts`, `ExamViewShell.tsx`, `ExamQuestionPalette.tsx`, `QuestionRenderer.tsx`, `ClusterSubtypeRenderer.tsx`, `RichTextContent.tsx`, `RichTextField.tsx`, `TrueFalseRenderer.tsx`, `ShortAnswerRenderer.tsx`, `InformaticsCodeRenderer.tsx`, `DualCodeBlockView.tsx`, `rich-text-parser.ts`
 - `exam-view.css`, `exam-theme.css`, `index.ts` (web-shared)
 
-`kit-sync-check.mjs` kiểm tra hash khớp. Trước release, smoke preview **12 môn** TN_THPT trên Composer (`ExamPreviewPanel`) và ít nhất MATH + ENGLISH + LITERATURE trên Student.
+`kit-sync-check.mjs` kiểm tra hash khớp. Trước release, smoke preview **10 môn** TN_THPT trên Composer (`ExamPreviewPanel`) và ít nhất MATH + ENGLISH + INFORMATICS trên Student.
+
+### Rich-text soạn thảo (Composer v1.3+)
+
+Token markup trong `content` JSONB (không HTML thô):
+
+| Token | Hiển thị |
+|-------|----------|
+| `**text**` | In đậm |
+| `*text*` | In nghiêng |
+| `__text__` | Gạch chân (Tiếng Anh notice/flyer) |
+| `` `code` `` | Mã inline |
+| ` ```cpp` / ` ```python` | Khối code (Tin học) |
+| `$…$`, `$$…$$` | KaTeX |
+| `[Ảnh: path]`, `[Audio: path]` | Media |
+
+Tin học Phần II: `informaticsSlot` 1–6 trên từng câu Đ/S; tùy chọn `content.codeBlocks[]` (Python + C++ song song).
+
+Tiếng Anh: passage cluster dùng `{{1}}`…`{{6}}` hoặc `___` cho fill_notice / fill_flyer / fill_gap.

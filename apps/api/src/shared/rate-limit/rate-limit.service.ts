@@ -29,6 +29,7 @@ export class RateLimitService implements OnModuleDestroy {
   }
 
   async check(key: string, maxAttempts: number, windowSec: number): Promise<void> {
+    if (process.env.DISABLE_RATE_LIMIT === 'true') return;
     if (this.redis) {
       try {
         const redisKey = `ratelimit:${key}`;

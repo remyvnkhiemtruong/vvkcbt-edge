@@ -2,6 +2,7 @@ import type {
   ExamPackageClusterRow,
   ExamPackageMediaEntry,
   ExamPackagePaperRow,
+  ExamPackageQuestionRow,
 } from './exam-package';
 import type { TnThptSubjectCode } from './tn-thpt-catalog';
 import { getDefaultStructure, getSubjectNameVi } from './tn-thpt-catalog';
@@ -28,23 +29,45 @@ type PaperQuestion = {
   content?: Record<string, unknown>;
   clusterId?: string | null;
   clusterOrder?: number | null;
+  informaticsSlot?: number;
 };
 
 const MEDIA_TOKEN_RE = /\[(?:Ảnh|Audio):\s*([^\]]+)\]/g;
 
-function collectMediaTokens(questions: PaperQuestion[]): string[] {
+function extractMediaFromText(text: string, paths: Set<string>) {
+  for (const m of text.matchAll(MEDIA_TOKEN_RE)) {
+    paths.add(m[1].trim());
+  }
+}
+
+function collectMediaTokens(
+  questions: PaperQuestion[],
+  clusters?: ExamPackageClusterRow[],
+): string[] {
   const paths = new Set<string>();
   for (const q of questions) {
-    const texts: string[] = [];
     const stem = q.content?.stem;
-    if (typeof stem === 'string') texts.push(stem);
+    if (typeof stem === 'string') extractMediaFromText(stem, paths);
     const passage = q.content?.passage;
-    if (typeof passage === 'string') texts.push(passage);
-    for (const t of texts) {
-      for (const m of t.matchAll(MEDIA_TOKEN_RE)) {
-        paths.add(m[1].trim());
+    if (typeof passage === 'string') extractMediaFromText(passage, paths);
+    const options = q.content?.options;
+    if (Array.isArray(options)) {
+      for (const o of options) {
+        if (typeof o === 'string') extractMediaFromText(o, paths);
       }
     }
+    const statements = q.content?.statements;
+    if (Array.isArray(statements)) {
+      for (const s of statements) {
+        if (typeof s === 'string') extractMediaFromText(s, paths);
+      }
+    }
+  }
+  for (const c of clusters ?? []) {
+    const text = (c.passage as { text?: string })?.text;
+    const body = (c.passage as { body?: string })?.body;
+    if (typeof text === 'string') extractMediaFromText(text, paths);
+    if (typeof body === 'string') extractMediaFromText(body, paths);
   }
   return [...paths];
 }
@@ -82,7 +105,7 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
   }
 
   // Media token check
-  const mediaPaths = collectMediaTokens(questions);
+  const mediaPaths = collectMediaTokens(questions, input.clusters);
   const manifestPaths = new Set((input.mediaManifest ?? []).map((m) => m.path));
   for (const p of mediaPaths) {
     if (!manifestPaths.has(p) && !p.startsWith('media/')) {
@@ -92,20 +115,7 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
     }
   }
 
-  if (subjectCode === 'LITERATURE') {
-    const essays = questionsByType(questions, 'essay');
-    if (essays.length !== 2) {
-      errors.push(`${nameVi}: cần đúng 2 câu tự luận (đọc hiểu + nghị luận), có ${essays.length}`);
-    }
-    const p1 = questionsByPart(questions, 'part1_reading');
-    const p2 = questionsByPart(questions, 'part2_writing');
-    if (p1.length !== 1) errors.push(`${nameVi}: Phần I đọc hiểu cần 1 câu, có ${p1.length}`);
-    if (p2.length !== 1) errors.push(`${nameVi}: Phần II nghị luận cần 1 câu, có ${p2.length}`);
-    const score = sumMaxScore(questions);
-    if (Math.abs(score - 10) > 0.01) {
-      errors.push(`${nameVi}: tổng điểm phải = 10, hiện ${score}`);
-    }
-  } else if (subjectCode === 'ENGLISH') {
+  if (subjectCode === 'ENGLISH') {
     const clusterMcq = questionsByType(questions, 'cluster_mcq');
     const expected = structure.parts.part1_cluster_mcq?.count ?? 40;
     if (clusterMcq.length !== expected) {
@@ -152,6 +162,34 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
         }
         if (partCfg.type === 'true_false' && !isBooleanArray4(q.correctKey)) {
           errors.push(`${nameVi}: câu TF ${q.id ?? '?'} correctKey phải là boolean[4]`);
+        }
+      }
+      if (subjectCode === 'INFORMATICS' && partKey === 'part2_true_false') {
+        const slots = new Set<number>();
+        for (const q of partQuestions) {
+          const slot =
+            q.informaticsSlot ??
+            (typeof q.content?.informaticsSlot === 'number' ? q.content.informaticsSlot : undefined);
+          if (slot == null) {
+            warnings.push(
+              `${nameVi}: câu TF ${q.id ?? '?'} thiếu informaticsSlot (sẽ suy từ thứ tự)`,
+            );
+            continue;
+          }
+          if (slot < 1 || slot > 6) {
+            errors.push(`${nameVi}: câu TF ${q.id ?? '?'} informaticsSlot phải 1–6`);
+          } else if (slots.has(slot)) {
+            errors.push(`${nameVi}: informaticsSlot ${slot} bị trùng`);
+          } else {
+            slots.add(slot);
+          }
+        }
+        if (partQuestions.length === 6) {
+          for (let s = 1; s <= 6; s++) {
+            if (!slots.has(s) && partQuestions.some((q) => q.informaticsSlot != null || q.content?.informaticsSlot != null)) {
+              errors.push(`${nameVi}: thiếu informaticsSlot ${s}`);
+            }
+          }
         }
       }
     }

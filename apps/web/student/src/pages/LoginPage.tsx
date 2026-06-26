@@ -4,7 +4,7 @@ import { useExamStore } from '../store';
 
 import { studentApi } from '../api';
 
-import { APP_AUTHOR, SCHOOL_NAME, vi, isProductionUi, CbtBrandLogo, ApiStatusBanner } from '@shared/index';
+import { vi, isProductionUi, CbtBrandLogo, ApiStatusBanner } from '@shared/index';
 
 
 
@@ -20,7 +20,6 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [roomError, setRoomError] = useState('');
-  const [clientIp, setClientIp] = useState('—');
 
   const setAuth = useExamStore((s) => s.setAuth);
   const setExamSessionIdStore = useExamStore((s) => s.setExamSessionId);
@@ -79,20 +78,6 @@ export default function LoginPage() {
 
     }
 
-
-
-    fetch('/api/infra/health')
-
-      .then((r) => r.json())
-
-      .then((d) => {
-
-        if (d?.clientIp) setClientIp(d.clientIp);
-
-      })
-
-      .catch(() => setClientIp(window.location.hostname));
-
   }, []);
 
 
@@ -112,8 +97,6 @@ export default function LoginPage() {
       const res = await studentApi.login(examAccount, pin, examSessionId || undefined);
 
       setAuth(res.token, res.sessionId, {
-
-        hasPersonalSlots: res.hasPersonalSlots,
 
         subjectCode: res.subjectCode,
 
@@ -158,9 +141,7 @@ export default function LoginPage() {
 
         <header className="student-login__topbar">
 
-          <span>CBT — {SCHOOL_NAME.toUpperCase()}</span>
-
-          <span>IP: {clientIp}</span>
+          <span>{vi.systemTitle}</span>
 
         </header>
 
@@ -176,7 +157,6 @@ export default function LoginPage() {
 
             <h2>{vi.login.title}</h2>
 
-            <p className="student-login__hint">{vi.login.accountHint}</p>
             {roomError && <p className="cbt-error-text" style={{ fontSize: '0.85rem' }}>{roomError}</p>}
 
             <form onSubmit={handleLogin}>
@@ -235,8 +215,6 @@ export default function LoginPage() {
 
                 />
 
-                <p className="student-login__hint">{vi.login.pinHint}</p>
-
               </div>
 
               {error && <p className="cbt-error-text">{error}</p>}
@@ -255,9 +233,7 @@ export default function LoginPage() {
 
         <footer className="student-login__footer">
 
-          <span>
-            © {APP_AUTHOR} · {production ? vi.footerPublic : `${SCHOOL_NAME} — ${vi.footerDoc}`}
-          </span>
+          <span>{vi.copyrightFooter}</span>
 
           {!production && <span>Trang 1/24</span>}
 

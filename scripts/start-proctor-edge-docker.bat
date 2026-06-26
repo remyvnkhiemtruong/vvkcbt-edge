@@ -8,7 +8,7 @@ set ROOT=%CD%
 echo.
 echo ========================================
 echo   VVKCBT - May giam thi (Docker) — tuy chon
-echo   THPT Vo Van Kiet - Ca Mau
+echo   THPT Vo Van Kiet
 echo ========================================
 echo.
 

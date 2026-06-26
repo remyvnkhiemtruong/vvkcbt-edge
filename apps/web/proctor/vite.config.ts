@@ -37,6 +37,7 @@ export default defineConfig({
     open: '/proctor/',
     proxy: {
       '/api': apiTarget,
+      '/uploads': apiTarget,
       '/socket.io': { target: apiTarget, ws: true },
       '/proctoring': { target: apiTarget, ws: true },
     },

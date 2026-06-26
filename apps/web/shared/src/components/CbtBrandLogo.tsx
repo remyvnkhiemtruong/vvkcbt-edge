@@ -1,11 +1,12 @@
-const SO_GD =
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: { VITE_SO_GD_NAME?: string } }).env?.VITE_SO_GD_NAME) ||
-  'Sở GDĐT Cà Mau';
-const SCHOOL =
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: { VITE_SCHOOL_NAME?: string } }).env?.VITE_SCHOOL_NAME) ||
-  'Trường THPT Võ Văn Kiệt';
+import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+
+const env =
+  typeof import.meta !== 'undefined'
+    ? (import.meta as { env?: Record<string, string | undefined> }).env
+    : undefined;
+
+const SO_GD = env?.VITE_SO_GD_NAME || 'SỞ GIÁO DỤC VÀ ĐÀO TẠO TỈNH CÀ MAU';
+const SCHOOL_BRAND = env?.VITE_SCHOOL_BRAND_NAME || DEFAULT_SCHOOL_NAME;
 
 export function CbtBrandLogo({
   size = 48,
@@ -18,15 +19,22 @@ export function CbtBrandLogo({
   showSchoolName?: boolean;
   logoUrl?: string;
 }) {
-  const px = variant === 'login' ? Math.max(size, 80) : size;
+  const isLogin = variant === 'login';
+  const px = isLogin ? Math.max(size, 80) : size;
+
   return (
     <div
       className={`cbt-brand-logo cbt-brand-logo--${variant}`}
-      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: isLogin ? '0.65rem' : '0.5rem',
+        ...(isLogin ? { flexDirection: 'column', textAlign: 'center' } : {}),
+      }}
     >
       <img
         src={logoUrl}
-        alt={SCHOOL}
+        alt={SCHOOL_BRAND}
         width={px}
         height={px}
         style={{ objectFit: 'contain', maxHeight: px }}
@@ -34,12 +42,10 @@ export function CbtBrandLogo({
           (e.target as HTMLImageElement).style.display = 'none';
         }}
       />
-      {(showSchoolName || variant === 'login') && (
-        <div style={{ lineHeight: 1.2 }}>
-          {variant === 'login' && (
-            <div style={{ fontSize: '0.75rem', color: 'var(--cbt-text-muted, #64748b)' }}>{SO_GD}</div>
-          )}
-          <div style={{ fontWeight: 700, fontSize: variant === 'login' ? '0.95rem' : '0.8rem' }}>{SCHOOL}</div>
+      {showSchoolName && (
+        <div className="cbt-brand-logo__text">
+          <div className="cbt-brand-logo__sogd">{SO_GD}</div>
+          <div className="cbt-brand-logo__school">{SCHOOL_BRAND}</div>
         </div>
       )}
     </div>

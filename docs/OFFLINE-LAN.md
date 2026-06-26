@@ -30,8 +30,8 @@ Chi tiết: `docs/NATIVE-DEPLOY.md` · Profile A (server + client 2GB) · Profil
 ```env
 NODE_ENV=production
 DEPLOY_PROFILE=native
-SCHOOL_NAME=THPT Võ Văn Kiệt - Cà Mau
-VITE_SCHOOL_NAME=THPT Võ Văn Kiệt - Cà Mau
+SCHOOL_NAME=THPT Võ Văn Kiệt
+VITE_SCHOOL_NAME=THPT Võ Văn Kiệt
 VITE_UI_MODE=production
 VITE_EXAM_LOCK_MODE=browser
 EDGE_ORIGINS=http://localhost,http://127.0.0.1,http://192.168.1.50

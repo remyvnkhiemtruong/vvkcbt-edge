@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThan, Not, In } from 'typeorm';
+import { Repository, LessThanOrEqual, MoreThan, In } from 'typeorm';
 import { StudentSubjectSlot } from '../../database/entities/student-subject-slot.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
+import { ProctoringGateway } from '../proctoring/proctoring.gateway';
 
 @Injectable()
 export class SlotSchedulerService {
@@ -14,6 +15,7 @@ export class SlotSchedulerService {
     private readonly slotRepo: Repository<StudentSubjectSlot>,
     @InjectRepository(ExamSession)
     private readonly examSessionRepo: Repository<ExamSession>,
+    private readonly proctoringGateway: ProctoringGateway,
   ) {}
 
   @Cron('* * * * *')
@@ -37,13 +39,20 @@ export class SlotSchedulerService {
         .map((s) => s.id),
     );
 
+    const openedSessions = new Set<string>();
     let opened = 0;
     for (const slot of toOpen) {
       if (proctorAtTimeIds.has(slot.examSessionId)) continue;
       await this.slotRepo.update(slot.id, { status: 'open' });
+      openedSessions.add(slot.examSessionId);
       opened++;
     }
-    if (opened) this.logger.log(`Opened ${opened} subject slots`);
+    if (opened) {
+      this.logger.log(`Opened ${opened} subject slots`);
+      for (const examSessionId of openedSessions) {
+        this.proctoringGateway.broadcastScheduleUpdate(examSessionId, { reason: 'slots_batch' });
+      }
+    }
 
     const toLock = await this.slotRepo.find({
       where: {
@@ -51,12 +60,19 @@ export class SlotSchedulerService {
         scheduledEnd: LessThanOrEqual(now),
       },
     });
+    const lockedSessions = new Set<string>();
     for (const slot of toLock) {
       if (slot.status !== 'completed') {
         await this.slotRepo.update(slot.id, { status: 'locked' });
+        lockedSessions.add(slot.examSessionId);
       }
     }
-    if (toLock.length) this.logger.log(`Locked ${toLock.length} subject slots`);
+    if (toLock.length) {
+      this.logger.log(`Locked ${toLock.length} subject slots`);
+      for (const examSessionId of lockedSessions) {
+        this.proctoringGateway.broadcastScheduleUpdate(examSessionId, { reason: 'slots_batch' });
+      }
+    }
   }
 
   async openEarly(slotId: string) {
@@ -64,6 +80,12 @@ export class SlotSchedulerService {
     if (!slot) throw new Error('Slot not found');
     if (slot.status === 'completed') throw new Error('Slot already completed');
     await this.slotRepo.update(slotId, { status: 'open' });
+    this.proctoringGateway.broadcastScheduleUpdate(slot.examSessionId, {
+      reason: 'slot_opened',
+      slotId,
+      subjectCode: slot.subjectCode,
+      status: 'open',
+    });
     return { ok: true, slotId };
   }
 
@@ -73,6 +95,12 @@ export class SlotSchedulerService {
     const end = new Date(slot.scheduledEnd);
     end.setMinutes(end.getMinutes() + extraMinutes);
     await this.slotRepo.update(slotId, { scheduledEnd: end });
+    this.proctoringGateway.broadcastScheduleUpdate(slot.examSessionId, {
+      reason: 'slot_extended',
+      slotId,
+      subjectCode: slot.subjectCode,
+      scheduledEnd: end.toISOString(),
+    });
     return { ok: true, scheduledEnd: end };
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregatePartScores } from './scoring';
+import { aggregatePartScores, compareShortAnswer, scoreAnswer } from './scoring';
 
 describe('aggregatePartScores', () => {
   it('aggregates math 3-part scores', () => {
@@ -23,19 +23,49 @@ describe('aggregatePartScores', () => {
     assert.equal(parts.maxPart3, 0.5);
   });
 
-  it('maps literature essay parts to part1/part2', () => {
-    const questions = [
-      { id: 'v1', part: 'part1_reading', maxScore: 3 },
-      { id: 'v2', part: 'part2_writing', maxScore: 7 },
-    ];
-    const breakdown = [
-      { questionId: 'v1', score: 0, maxScore: 3 },
-      { questionId: 'v2', score: 0, maxScore: 7 },
-    ];
-    const parts = aggregatePartScores(questions, breakdown);
-    assert.equal(parts.part1, 0);
-    assert.equal(parts.part2, 0);
-    assert.equal(parts.maxPart1, 3);
-    assert.equal(parts.maxPart2, 7);
+});
+
+describe('scoreAnswer', () => {
+  it('scores short_answer with comma when rules is undefined', () => {
+    const q = {
+      id: 'q1',
+      type: 'short_answer' as const,
+      correctKey: '2.5',
+      maxScore: 0.5,
+      part: 'part3_short',
+    };
+    const withDot = scoreAnswer(q, '2.5');
+    const withComma = scoreAnswer(q, '2,5');
+    assert.equal(withDot.score, 0.5);
+    assert.equal(withComma.score, 0.5);
+  });
+
+  it('handles null scoring rules without throwing', () => {
+    const q = {
+      id: 'q2',
+      type: 'mcq' as const,
+      correctKey: 'A',
+      maxScore: 0.25,
+    };
+    const result = scoreAnswer(q, 'A', undefined);
+    assert.equal(result.score, 0.25);
+  });
+
+  it('does not throw when true_false answer is missing', () => {
+    const q = {
+      id: 'q3',
+      type: 'true_false' as const,
+      correctKey: [true, false, true, false],
+      maxScore: 1,
+    };
+    const result = scoreAnswer(q, undefined);
+    assert.equal(result.score, 0);
+  });
+});
+
+describe('compareShortAnswer', () => {
+  it('treats comma and dot as equivalent', () => {
+    assert.equal(compareShortAnswer('2,5', '2.5'), true);
+    assert.equal(compareShortAnswer('2.5', '2,5'), true);
   });
 });

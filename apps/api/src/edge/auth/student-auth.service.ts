@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, HttpException, HttpStatus, Optional } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Optional, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -6,7 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
-import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsByPart } from '@vnu/shared-types';
+import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsByPart, DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
 import { QuestionCluster } from '../../database/entities/question-cluster.entity';
 import { In } from 'typeorm';
 import { AuditService } from '../../shared/audit/audit.service';
@@ -14,12 +14,14 @@ import { ExamRouterService } from '../routing/exam-router.service';
 import { ScoringService } from '../../shared/scoring/scoring.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { RateLimitService } from '../../shared/rate-limit/rate-limit.service';
 import { ProctoringGateway } from '../proctoring/proctoring.gateway';
 import { SubjectRoomCompletionService } from '../proctoring/subject-room-completion.service';
+import { isIpBindingDisabled, normalizeClientIp } from '../../shared/utils/client-ip';
 
 @Injectable()
 export class StudentAuthService {
+  private readonly logger = new Logger(StudentAuthService.name);
+
   constructor(
     @InjectRepository(StudentSession)
     private readonly sessionRepo: Repository<StudentSession>,
@@ -33,7 +35,6 @@ export class StudentAuthService {
     private readonly scoringService: ScoringService,
     @Optional() @InjectQueue('submit-retry') private readonly submitQueue: Queue | undefined,
     private readonly configService: ConfigService,
-    private readonly rateLimit: RateLimitService,
     private readonly proctoringGateway: ProctoringGateway,
     private readonly subjectRoomCompletion: SubjectRoomCompletionService,
   ) {}
@@ -42,7 +43,7 @@ export class StudentAuthService {
     const envSessionId = this.configService.get<string>('EDGE_ACTIVE_SESSION_ID');
     const roomName = this.configService.get<string>('EDGE_ROOM_NAME') || 'Phòng máy số 1';
     const capacity = parseInt(this.configService.get<string>('EDGE_ROOM_CAPACITY') || '30', 10);
-    const schoolName = this.configService.get<string>('VITE_SCHOOL_NAME') || 'THPT Võ Văn Kiệt - Cà Mau';
+    const schoolName = this.configService.get<string>('VITE_SCHOOL_NAME') || DEFAULT_SCHOOL_NAME;
 
     let examSessionId = envSessionId?.trim() || '';
     let sessionName = '';
@@ -78,17 +79,9 @@ export class StudentAuthService {
     return ctx.examSessionId;
   }
 
-  private async checkRateLimit(sbd: string) {
-    try {
-      await this.rateLimit.check(`student:${sbd}`, 5, 60);
-    } catch {
-      throw new HttpException('Quá nhiều lần đăng nhập. Vui lòng thử lại sau.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-  }
-
   async login(account: string, pin: string, examSessionId: string | undefined, clientIp: string) {
+    const normalizedIp = normalizeClientIp(clientIp);
     const trimmed = account.trim();
-    await this.checkRateLimit(trimmed);
     const resolvedSessionId = await this.resolveExamSessionId(examSessionId);
 
     let session = await this.sessionRepo.findOne({
@@ -106,30 +99,25 @@ export class StudentAuthService {
     const valid = await bcrypt.compare(pin, session.pinHash);
     if (!valid) throw new UnauthorizedException('Sai tài khoản hoặc mã PIN');
 
-    if (session.boundIp && session.boundIp !== clientIp) {
-      throw new UnauthorizedException('Máy không khớp phòng thi đã gán');
+    if (!isIpBindingDisabled()) {
+      if (session.boundIp && normalizeClientIp(session.boundIp) !== normalizedIp) {
+        throw new UnauthorizedException('Máy không khớp phòng thi đã gán');
+      }
     }
 
     if (!session.boundIp) {
-      session.boundIp = clientIp;
+      session.boundIp = normalizedIp;
     }
 
     if (!session.examPaperId) {
-      if (session.subjectCode) {
-        const paper = await this.examRouter.resolvePaperBySubject(
-          resolvedSessionId,
-          session.subjectCode,
-        );
-        session.examPaperId = paper.id;
-      } else {
-        const paper = await this.examRouter.resolvePaper(
-          resolvedSessionId,
-          session.studentId,
-          session.student?.comboCode,
-          session.student?.subjectGroup,
-        );
-        session.examPaperId = paper.id;
+      if (!session.subjectCode) {
+        throw new BadRequestException('Chưa phân môn thi cho thí sinh');
       }
+      const paper = await this.examRouter.resolvePaperBySubject(
+        resolvedSessionId,
+        session.subjectCode,
+      );
+      session.examPaperId = paper.id;
     }
 
     const singleActive = session.examSession?.rules?.proctoring?.single_active_session !== false;
@@ -137,14 +125,20 @@ export class StudentAuthService {
       session.sessionVersion = (session.sessionVersion ?? 1) + 1;
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+      session.locked = false;
+      session.violations = { count: 0, events: [] };
+    }
+
     session.status = StudentSessionStatus.ACTIVE;
     session.lastHeartbeat = new Date();
+
     await this.sessionRepo.save(session);
 
     const token = this.jwtService.sign({
       sub: session.id,
       sessionId: session.id,
-      ip: clientIp,
+      ip: normalizedIp,
       role: 'student',
       sessionVersion: session.sessionVersion,
     });
@@ -153,90 +147,52 @@ export class StudentAuthService {
       eventType: AuditEventType.LOGIN,
       examSessionId: resolvedSessionId,
       studentSessionId: session.id,
-      ip: clientIp,
+      ip: normalizedIp,
       payload: { sbd: session.sbd, examAccount: session.examAccount },
     });
-
-    const hasPersonalSlots =
-      this.examRouter.isTnptPersonalized(session.examSession) || !!session.subjectCode;
 
     return {
       token,
       sessionId: session.id,
       examType: session.examSession?.rules?.exam_type,
-      hasPersonalSlots,
       subjectCode: session.subjectCode,
       sbd: session.sbd,
       examAccount: session.examAccount,
     };
   }
 
-  async listSlots(session: StudentSession) {
-    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
+  private async ensureSubjectSlotStarted(session: StudentSession) {
+    if (!session.studentId || !session.subjectCode) return;
+    const active = await this.examRouter.findActiveSlotForSession(session.id);
+    if (active) return;
+
     const slots = await this.examRouter.listSubjectSlots(session.studentId, session.examSessionId);
-    if (session.subjectCode) {
-      return slots.filter((s) => s.subjectCode === session.subjectCode);
-    }
-    return slots;
-  }
-
-  async startSlot(session: StudentSession, slotId: string) {
-    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
-    const started = await this.examRouter.startSubjectSlot(
-      slotId,
-      session.studentId,
-      session.examSessionId,
-      session.id,
+    const slot = slots.find(
+      (s) => s.subjectCode === session.subjectCode && s.status !== 'completed' && s.status !== 'locked',
     );
-    session.examPaperId = started.paperId;
-    session.answers = {};
-    session.submittedAt = undefined;
-    session.scoreResult = undefined;
-    session.status = StudentSessionStatus.ACTIVE;
-    session.locked = false;
-    await this.sessionRepo.save(session);
-    return started;
-  }
+    if (!slot) return;
 
-  async prefetchSlot(session: StudentSession, slotId: string) {
-    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
     try {
-      const { slot, paper } = await this.examRouter.prefetchSlotPaper(
+      await this.examRouter.startSubjectSlot(
+        slot.id,
         session.studentId,
         session.examSessionId,
-        slotId,
+        session.id,
       );
-      const structure = getDefaultStructure(slot.subjectCode);
-      const partOrder = structure ? Object.keys(structure.parts) : [];
-      const rawQuestions = (paper.questions as Array<Record<string, unknown>>).map((q) =>
-        this.scoringService.stripCorrectKey(q),
-      ) as Array<{ id: string; type?: string; part?: string; partKey?: string }>;
-      const normalized = enrichQuestionsWithPart(rawQuestions, structure ?? undefined);
-      const shuffleWithinPart = structure?.shuffleWithinPart ?? true;
-      const ordered =
-        partOrder.length > 0
-          ? orderQuestionsByPart(normalized, partOrder, `${session.id}:${slotId}`, {
-              shuffleWithinPart,
-            })
-          : normalized;
-      return {
-        slotId: slot.id,
-        subject: slot.subjectCode,
-        scheduledStart: slot.scheduledStart,
-        scheduledEnd: slot.scheduledEnd,
-        paper: { id: paper.id, title: paper.title, questions: ordered },
-      };
-    } catch {
-      throw new NotFoundException('Không tải được đề cho ca thi');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ca thi chưa mở';
+      throw new BadRequestException(msg);
     }
   }
 
   async getExam(session: StudentSession) {
     const sessionWithPaper = await this.sessionRepo.findOne({
       where: { id: session.id },
-      relations: ['examPaper', 'examSession'],
+      relations: ['examPaper', 'examSession', 'student'],
     });
     if (!sessionWithPaper?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
+
+    await this.ensureSubjectSlotStarted(sessionWithPaper);
 
     const paper = sessionWithPaper.examPaper;
     const examSession = sessionWithPaper.examSession;
@@ -364,88 +320,115 @@ export class StudentAuthService {
     });
     if (!sessionFull?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
 
-    const isMultiSubject = this.examRouter.isTnptPersonalized(sessionFull.examSession);
-    const activeSlot = isMultiSubject
-      ? await this.examRouter.findActiveSlotForSession(session.id)
-      : null;
+    const examSession = sessionFull.examSession;
+    const activeSlot = await this.examRouter.findActiveSlotForSession(session.id);
 
-    if (!isMultiSubject && sessionFull.submittedAt) {
-      return sessionFull.scoreResult;
+    if (sessionFull.submittedAt) {
+      const prior = sessionFull.examPaper;
+      return {
+        total: (sessionFull.scoreResult as { total?: number })?.total,
+        breakdown: (sessionFull.scoreResult as { breakdown?: unknown[] })?.breakdown,
+        partScores: (sessionFull.scoreResult as { partScores?: Record<string, number> })?.partScores,
+        subject: prior.subject,
+        sbd: sessionFull.sbd,
+        examAccount: sessionFull.examAccount,
+        serverNow: new Date().toISOString(),
+      };
     }
 
     const paper = sessionFull.examPaper;
-    const questions = paper.questions as Array<{
+    const questionList = Array.isArray(paper.questions) ? paper.questions : [];
+    const questions = (questionList as Array<{
       id: string;
       type: 'mcq' | 'true_false' | 'short_answer' | 'essay' | 'cluster_mcq';
       correctKey: unknown;
       maxScore?: number;
       bankQuestionId?: string;
       part?: string;
-    }>;
+      partKey?: string;
+    }>).map((q) => ({
+      ...q,
+      part: q.part ?? q.partKey,
+    }));
 
-    const result = this.scoringService.scoreExam(
-      questions,
-      sessionFull.answers,
-      sessionFull.examSession.rules,
-      sessionFull.id,
-    );
+    const examRules = examSession?.rules ?? {};
+    const answers = sessionFull.answers ?? {};
+    let result;
+    try {
+      result = this.scoringService.scoreExam(
+        questions,
+        answers,
+        examRules,
+        sessionFull.id,
+        paper.subject,
+      );
+    } catch (err) {
+      this.logger.error(`scoreExam failed for session ${sessionFull.id}`, err instanceof Error ? err.stack : err);
+      throw err;
+    }
 
     const partScores = aggregatePartScores(questions, result.breakdown);
-    const pendingManual = paper.subject === 'LITERATURE';
 
-    await this.scoringService.createGradingFlags(sessionFull.id, result.breakdown, sessionFull.answers);
-    await this.scoringService.updateDifficultyStats(questions, sessionFull.answers);
+    try {
+      await this.scoringService.createGradingFlags(sessionFull.id, result.breakdown, answers);
+      await this.scoringService.updateDifficultyStats(questions, answers);
+    } catch (err) {
+      this.logger.warn(
+        `createGradingFlags/updateDifficultyStats failed for session ${sessionFull.id}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     const scorePayload = {
       ...(result as unknown as Record<string, unknown>),
       partScores,
-      pendingManual,
       subject: paper.subject,
+      informaticsBranchInvalid:
+        (result as { informaticsBranchInvalid?: boolean }).informaticsBranchInvalid === true
+          ? true
+          : undefined,
     };
 
-    let hasMoreSlots = false;
-    if (isMultiSubject && activeSlot) {
+    if (activeSlot) {
       await this.examRouter.completeSubjectSlot(
         activeSlot.id,
         scorePayload,
         sessionFull.violations?.count ?? 0,
       );
-      const pending = await this.examRouter.countPendingSlots(
-        sessionFull.id,
-        sessionFull.studentId,
-        sessionFull.examSessionId,
-      );
-      hasMoreSlots = pending > 0;
-      sessionFull.answers = {};
-      sessionFull.submittedAt = undefined;
-      sessionFull.scoreResult = undefined;
-      sessionFull.status = StudentSessionStatus.ACTIVE;
-      await this.sessionRepo.save(sessionFull);
-    } else {
-      sessionFull.submittedAt = new Date();
-      sessionFull.status = StudentSessionStatus.SUBMITTED;
-      sessionFull.scoreResult = scorePayload;
-      await this.sessionRepo.save(sessionFull);
     }
 
-    await this.proctoringGateway.broadcastGrid(sessionFull.examSessionId);
-    this.proctoringGateway.emitScoreUpdate(sessionFull.examSessionId, {
-      slotId: activeSlot?.id,
-      sbd: sessionFull.sbd,
-      subjectCode: paper.subject,
-      scoreTotal: result.total,
-      partScores,
+    sessionFull.submittedAt = new Date();
+    sessionFull.status = StudentSessionStatus.SUBMITTED;
+    sessionFull.scoreResult = scorePayload;
+    await this.sessionRepo.save(sessionFull);
+
+    await this.proctoringGateway.broadcastGrid(sessionFull.examSessionId).catch((err) => {
+      this.logger.warn(`broadcastGrid after submit: ${err instanceof Error ? err.message : err}`);
     });
+    try {
+      this.proctoringGateway.emitScoreUpdate(sessionFull.examSessionId, {
+        slotId: activeSlot?.id,
+        sbd: sessionFull.sbd,
+        subjectCode: paper.subject,
+        scoreTotal: result.total,
+        partScores,
+      });
+    } catch (err) {
+      this.logger.warn(`emitScoreUpdate after submit: ${err instanceof Error ? err.message : err}`);
+    }
 
     const labRoom =
       sessionFull.student?.labRoom?.trim() ||
       this.configService.get<string>('EDGE_ROOM_NAME') ||
       'Phòng máy số 1';
-    await this.subjectRoomCompletion.checkAfterSubmit(
-      sessionFull.examSessionId,
-      paper.subject,
-      labRoom,
-    );
+    try {
+      await this.subjectRoomCompletion.checkAfterSubmit(
+        sessionFull.examSessionId,
+        paper.subject,
+        labRoom,
+      );
+    } catch (err) {
+      this.logger.warn(`checkAfterSubmit: ${err instanceof Error ? err.message : err}`);
+    }
 
     await this.auditService.log({
       eventType: AuditEventType.SUBMIT,
@@ -457,15 +440,15 @@ export class StudentAuthService {
         subject: paper.subject,
         slotId: activeSlot?.id,
       },
+    }).catch((err) => {
+      this.logger.warn(`audit log after submit: ${err instanceof Error ? err.message : err}`);
     });
 
     return {
       total: result.total,
       breakdown: result.breakdown,
       partScores,
-      pendingManual,
       subject: paper.subject,
-      hasMoreSlots,
       sbd: sessionFull.sbd,
       examAccount: sessionFull.examAccount,
       serverNow: new Date().toISOString(),
@@ -482,6 +465,11 @@ export class StudentAuthService {
       relations: ['examSession', 'examPaper', 'student'],
     });
     if (!session || session.submittedAt) return;
-    await this.submit(session, session.boundIp || 'retry-inline');
+    try {
+      await this.submit(session, session.boundIp || 'retry-inline');
+    } catch (err) {
+      this.logger.error(`inline submit-retry failed for ${sessionId}`, err instanceof Error ? err.stack : err);
+      throw err;
+    }
   }
 }

@@ -1,6 +1,6 @@
 # VVKCBT — Runbook ngày G
 
-**THPT Võ Văn Kiệt — Cà Mau** · Tác giả hệ thống: **Trương Minh Khiêm**
+**THPT Võ Văn Kiệt** · Tác giả hệ thống: **Trương Minh Khiêm**
 
 ## T−24 giờ (chuẩn bị)
 

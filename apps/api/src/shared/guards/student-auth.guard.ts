@@ -3,6 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StudentSession } from '../../database/entities/student-session.entity';
+import {
+  getClientIpFromRequest,
+  isIpBindingDisabled,
+  normalizeClientIp,
+} from '../utils/client-ip';
 
 @Injectable()
 export class StudentAuthGuard implements CanActivate {
@@ -27,9 +32,12 @@ export class StudentAuthGuard implements CanActivate {
       throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
     }
 
-    const clientIp = request.ip || request.headers['x-forwarded-for'] || request.socket?.remoteAddress;
-    if (payload.ip && clientIp && payload.ip !== clientIp) {
-      throw new UnauthorizedException('IP binding mismatch');
+    if (!isIpBindingDisabled()) {
+      const clientIp = getClientIpFromRequest(request);
+      const tokenIp = normalizeClientIp(payload.ip);
+      if (tokenIp && clientIp && tokenIp !== clientIp) {
+        throw new UnauthorizedException('IP binding mismatch');
+      }
     }
 
     const session = await this.sessionRepo.findOne({

@@ -44,28 +44,9 @@ function short(id: string, subject: string, part: string, score: number) {
   };
 }
 
-function essay(id: string, part: string, score: number) {
-  return {
-    id,
-    subject: 'LITERATURE',
-    type: 'essay',
-    part,
-    difficulty: 'medium',
-    content: { stem: `Đề ${part}` },
-    correctKey: null,
-    maxScore: score,
-  };
-}
-
 function buildStandardPaper(subject: TnThptSubjectCode): ExamPackagePaperRow {
   const structure = getDefaultStructure(subject)!;
   const questions: Record<string, unknown>[] = [];
-
-  if (subject === 'LITERATURE') {
-    questions.push(essay('lit-1', 'part1_reading', 4));
-    questions.push(essay('lit-2', 'part2_writing', 6));
-    return { title: 'Văn', subject, questions };
-  }
 
   if (subject === 'ENGLISH') {
     const clusters: ExamPackageClusterRow[] = [];
@@ -132,7 +113,6 @@ export function buildValidEnglishClusters(): ExamPackageClusterRow[] {
 }
 
 export const BLUEPRINT_FIXTURES: Record<TnThptSubjectCode, ExamPackagePaperRow> = {
-  LITERATURE: buildStandardPaper('LITERATURE'),
   MATH: buildStandardPaper('MATH'),
   ENGLISH: buildStandardPaper('ENGLISH'),
   PHYSICS: buildStandardPaper('PHYSICS'),

@@ -19,8 +19,7 @@ import {
   TNPT_36_COMBOS,
   GDPT_STREAM_SAMPLES,
 } from './seed-structure-templates';
-import { getDefaultStructure } from '@vnu/shared-types';
-import { ExamType, QuestionType, Difficulty, RoutingMode, GdptAssessmentPeriod } from '@vnu/shared-types';
+import { getDefaultStructure, ExamType, QuestionType, Difficulty, RoutingMode, GdptAssessmentPeriod, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_CODE } from '@vnu/shared-types';
 
 async function seed() {
   await dataSource.initialize();
@@ -50,7 +49,7 @@ async function seed() {
 
   let school = await schoolRepo.findOne({ where: {} });
   if (!school) {
-    school = await schoolRepo.save(schoolRepo.create({ name: 'THPT Demo VNU', code: 'VNU001' }));
+    school = await schoolRepo.save(schoolRepo.create({ name: DEFAULT_SCHOOL_NAME, code: DEFAULT_SCHOOL_CODE }));
   }
 
   let cls = await classRepo.findOne({ where: {} });
@@ -81,7 +80,6 @@ async function seed() {
     cognitive_distribution: { nhan_biet: 0.4, thong_hieu: 0.3, van_dung: 0.3 },
     subjects: [
       { code: 'MATH', weight: 3, structureMode: 'default' as const, ui_mode: 'vertical_focus' as const },
-      { code: 'LITERATURE', weight: 2, structureMode: 'default' as const, ui_mode: 'split_view' as const },
     ],
     scoring: {
       true_false_branch: { '1': 0.1, '2': 0.25, '3': 0.5, '4': 1.0 },
@@ -168,22 +166,6 @@ async function seed() {
     },
   ];
 
-  const litQuestions = [
-    {
-      subject: 'LITERATURE',
-      type: QuestionType.ESSAY,
-      difficulty: Difficulty.LOW,
-      content: {
-        passage: 'Đoạn thơ: "Trăng lên đỉnh núi..." — Nguyễn Duy',
-        stem: 'Phân tích hình ảnh trăng trong đoạn thơ.',
-        subtype: 'comprehension',
-      },
-      correctKey: '',
-      maxScore: 4.0,
-      uiMode: 'split_view',
-    },
-  ];
-
   const englishCluster = await clusterRepo.findOne({ where: { clusterSubtype: 'reading_8' } });
   let clusterId = englishCluster?.id;
   if (!clusterId) {
@@ -211,7 +193,7 @@ async function seed() {
     },
   ];
 
-  const allQuestions = [...mathQuestions, ...litQuestions, ...englishQuestions];
+  const allQuestions = [...mathQuestions, ...englishQuestions];
   const savedQuestions: QuestionBank[] = [];
   for (const q of allQuestions) {
     let existing = await questionRepo.findOne({
@@ -249,8 +231,8 @@ async function seed() {
     );
   }
 
-  const litPaperQuestions = savedQuestions
-    .filter((q) => q.subject === 'LITERATURE')
+  const englishPaperQuestions = savedQuestions
+    .filter((q) => q.subject === 'ENGLISH')
     .map((q) => ({
       id: q.id,
       bankQuestionId: q.id,
@@ -258,20 +240,21 @@ async function seed() {
       content: q.content,
       correctKey: q.correctKey,
       maxScore: Number(q.maxScore),
-      uiMode: 'split_view',
-      partKey: 'part1_reading',
+      partKey: 'part1_cluster_mcq',
+      clusterId: q.clusterId,
+      clusterOrder: q.clusterOrder,
     }));
 
-  let litPaper = await paperRepo.findOne({ where: { comboCode: 'D01', examSessionId: examSession.id, subject: 'LITERATURE' } });
-  if (!litPaper) {
-    litPaper = await paperRepo.save(
+  let englishPaper = await paperRepo.findOne({ where: { comboCode: 'D01', examSessionId: examSession.id, subject: 'ENGLISH' } });
+  if (!englishPaper) {
+    englishPaper = await paperRepo.save(
       paperRepo.create({
-        title: 'Đề Văn - Tổ hợp D01',
-        subject: 'LITERATURE',
+        title: 'Đề Anh - Tổ hợp D01',
+        subject: 'ENGLISH',
         comboCode: 'D01',
         examSessionId: examSession.id,
-        questions: litPaperQuestions,
-        difficultyMeta: { low: 1, medium: 0, high: 0 },
+        questions: englishPaperQuestions,
+        difficultyMeta: { low: 0, medium: 1, high: 0 },
       }),
     );
   }
@@ -307,7 +290,7 @@ async function seed() {
   const slotStart = new Date(now.getTime() - 60 * 60 * 1000);
   const slotEnd = new Date(now.getTime() + 4 * 60 * 60 * 1000);
   for (const student of students.filter((s) => s.comboCode === 'A00')) {
-    for (const subject of ['MATH', 'LITERATURE', 'PHYSICS']) {
+    for (const subject of ['MATH', 'PHYSICS']) {
       if (!getDefaultStructure(subject)) continue;
       const existing = await slotRepo.findOne({
         where: { studentId: student.id, examSessionId: examSession.id, subjectCode: subject },
@@ -340,7 +323,7 @@ async function seed() {
           pinHash,
           studentId: student.id,
           examSessionId: examSession.id,
-          examPaperId: student.comboCode === 'D01' ? litPaper.id : mathPaper.id,
+          examPaperId: student.subjectGroup === 'ENGLISH' ? englishPaper.id : mathPaper.id,
         }),
       );
     }

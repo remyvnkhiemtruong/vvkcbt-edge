@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { getDefaultStructure, TN_THPT_SUBJECTS } from '@vnu/shared-types';
-import { buildExamParts, findPartIndex } from './exam-clusters';
+import { buildExamParts, buildViewGroups, findPartIndex, findViewGroupIndex } from './exam-clusters';
 import type { ExamQuestion } from '../components/ExamViewShell';
 
 function makeQuestions(subjectCode: string): ExamQuestion[] {
@@ -51,4 +51,34 @@ describe('buildExamParts', () => {
       assert.equal(total, qs.length, meta.code);
     });
   }
+});
+
+describe('buildViewGroups', () => {
+  it('one group per non-cluster question', () => {
+    const qs: ExamQuestion[] = [
+      { id: '1', type: 'mcq', content: { stem: 'A' } },
+      { id: '2', type: 'true_false', content: { stem: 'B', statements: ['s1', 's2', 's3', 's4'] } },
+    ];
+    const groups = buildViewGroups(qs);
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].start, 0);
+    assert.equal(groups[0].end, 0);
+    assert.equal(groups[1].passage, 'B');
+  });
+
+  it('groups consecutive cluster_mcq by clusterId', () => {
+    const qs: ExamQuestion[] = [
+      { id: '1', type: 'cluster_mcq', clusterId: 'c1', content: { passage: 'P1', stem: 'Q1' } },
+      { id: '2', type: 'cluster_mcq', clusterId: 'c1', content: { passage: 'P1', stem: 'Q2' } },
+      { id: '3', type: 'cluster_mcq', clusterId: 'c2', content: { passage: 'P2', stem: 'Q3' } },
+    ];
+    const groups = buildViewGroups(qs);
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].start, 0);
+    assert.equal(groups[0].end, 1);
+    assert.equal(groups[0].passage, 'P1');
+    assert.equal(groups[1].start, 2);
+    assert.equal(findViewGroupIndex(groups, 1), 0);
+    assert.equal(findViewGroupIndex(groups, 2), 1);
+  });
 });

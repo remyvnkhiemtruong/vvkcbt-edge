@@ -98,6 +98,8 @@ export interface ExamPackageQuestionRow {
   uiMode?: string;
   clusterId?: string | null;
   clusterOrder?: number | null;
+  /** Tin học Phần II: slot 1–6 */
+  informaticsSlot?: number;
 }
 
 export interface ExamPackagePaperRow {
@@ -144,4 +146,30 @@ export interface ExamPackageValidateResult {
   manifest?: ExamPackageManifest;
   errors: string[];
   warnings: string[];
+}
+
+/** Merge cluster passage/subtype into English cluster_mcq rows (preview / export). */
+export function injectClusterPassages(
+  questions: ExamPackageQuestionRow[],
+  clusters: ExamPackageClusterRow[],
+): ExamPackageQuestionRow[] {
+  const byId = new Map(clusters.map((c) => [c.id, c]));
+  return questions.map((q) => {
+    const cid = q.clusterId;
+    if (!cid || !byId.has(cid)) return q;
+    const cluster = byId.get(cid)!;
+    const passageText =
+      (cluster.passage as { text?: string })?.text ??
+      (cluster.passage as { body?: string })?.body ??
+      '';
+    return {
+      ...q,
+      clusterSubtype: cluster.clusterSubtype,
+      content: {
+        ...q.content,
+        passage: passageText,
+        subtype: cluster.clusterSubtype,
+      },
+    } as ExamPackageQuestionRow & { clusterSubtype?: string };
+  });
 }

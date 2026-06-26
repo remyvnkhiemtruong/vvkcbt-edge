@@ -1,7 +1,9 @@
+import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+
 export const SCHOOL_NAME =
   (typeof import.meta !== 'undefined' &&
     (import.meta as { env?: { VITE_SCHOOL_NAME?: string } }).env?.VITE_SCHOOL_NAME) ||
-  'THPT Võ Văn Kiệt - Cà Mau';
+  DEFAULT_SCHOOL_NAME;
 
 export const APP_AUTHOR =
   (typeof import.meta !== 'undefined' &&
@@ -19,6 +21,8 @@ export function isProductionUi(): boolean {
 export const vi = {
   footerDoc: 'Tài liệu Đặc tả Giao diện CBT',
   footerPublic: 'VVKCBT — THPT Võ Văn Kiệt',
+  systemTitle: 'HỆ THỐNG THI TRẮC NGHIỆM',
+  copyrightFooter: 'Copyright 2026 by Truong Minh Khiem',
   subtitle: 'Hệ thống khảo thí CBT — VVKCBT',
   login: {
     portal: 'CBT',
@@ -26,11 +30,9 @@ export const vi = {
     sbd: 'Số báo danh',
     examAccount: 'Tài khoản thi',
     accountPlaceholder: '123456',
-    accountHint: 'Mã in trên phiếu thi (6 chữ số) — không phải SBD',
     pin: 'Mật khẩu',
-    pinHint: 'Mã PIN 8 chữ số in trên phiếu thi',
     session: 'Mã ca thi',
-    submit: 'XÁC THỰC VÀO PHÒNG CHỜ',
+    submit: 'ĐĂNG NHẬP',
     loading: 'Đang xác thực...',
     errorDefault: 'Đăng nhập thất bại',
   },
@@ -59,6 +61,11 @@ export const vi = {
     finish: 'Kết thúc',
   },
   exam: {
+    headerDept: 'Sở GDĐT Cà Mau',
+    headerSchool:
+      (typeof import.meta !== 'undefined' &&
+        (import.meta as { env?: { VITE_SCHOOL_BRAND_NAME?: string } }).env?.VITE_SCHOOL_BRAND_NAME) ||
+      DEFAULT_SCHOOL_NAME,
     loading: 'Đang tải đề thi...',
     submit: 'NỘP BÀI',
     submitConfirm: 'Bạn chắc chắn muốn nộp bài? Sau khi nộp không thể sửa.',
@@ -152,14 +159,24 @@ export const vi = {
     system: {
       title: 'Hệ thống',
       edgeApi: 'Máy chủ Edge',
-      online: 'Đang hoạt động',
-      degraded: 'Gián đoạn',
+      online: 'Hoạt động bình thường',
+      degraded: 'Có sự cố — cần kiểm tra',
       composerHint:
         'Soạn gói thi bằng VVKCBT Composer (máy soạn đề), xuất ZIP và copy USB sang máy Edge.',
       checkDb: 'Cơ sở dữ liệu',
       checkDisk: 'Ổ đĩa',
-      checkOk: 'Ổn định',
-      checkFail: 'Lỗi',
+      checkOk: 'Hoạt động bình thường',
+      checkFail: 'Lỗi — không truy cập được',
+      checkSkipped: 'Không dùng (chế độ nhẹ)',
+      checkLabels: {
+        database: 'Cơ sở dữ liệu',
+        redis: 'Bộ nhớ đệm Redis',
+        uploads: 'Thư mục tải lên',
+        backups: 'Thư mục sao lưu',
+        migration: 'Phiên bản CSDL',
+        puppeteer: 'Trình xuất PDF',
+        pdfEngine: 'Công cụ PDF',
+      } as Record<string, string>,
     },
   },
   diagnostic: {
@@ -192,12 +209,30 @@ export const vi = {
     in_exam: 'Đang thi',
   },
   auditEvent: {
+    login: 'Đăng nhập',
+    click: 'Chọn câu',
+    focus_lost: 'Mất tiêu điểm',
+    focus_violation: 'Vi phạm chuyển tab',
+    autosave: 'Tự lưu bài',
+    submit: 'Nộp bài',
+    proctor_action: 'Giám thị điều khiển',
+    score_override: 'Sửa điểm',
+    fullscreen_exit: 'Thoát toàn màn hình',
+    help_request: 'Gọi giám thị',
+    appeal_created: 'Tạo phúc khảo',
+    appeal_reviewed: 'Duyệt phúc khảo',
     LOGIN: 'Đăng nhập',
     ANSWER: 'Trả lời',
     CHANGE: 'Thay đổi',
     VIOLATION: 'Vi phạm',
     SUBMIT: 'Nộp bài',
     HELP: 'Gọi giám thị',
+  },
+  proctorAction: {
+    lock_exam: 'Khóa bài thi',
+    extend_time: 'Gia hạn thêm giờ',
+    force_submit: 'Ép nộp bài',
+    reset_session: 'Đặt lại phiên thi',
   },
   apiErrors: {
     'Invalid account or PIN': 'Sai tài khoản hoặc mã PIN',

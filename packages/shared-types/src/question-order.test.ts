@@ -47,21 +47,7 @@ describe('question-order', () => {
     );
   });
 
-  it('assigns sequential essay parts for LITERATURE', () => {
-    const structure = getDefaultStructure('LITERATURE')!;
-    const questions = [
-      { id: 'e1', type: 'essay' },
-      { id: 'e2', type: 'essay' },
-    ];
-    const enriched = enrichQuestionsWithPart(
-      questions as Array<{ id: string; type: string; part?: string }>,
-      structure,
-    );
-    assert.equal(enriched[0].part, 'part1_reading');
-    assert.equal(enriched[1].part, 'part2_writing');
-  });
-
-  it('enriches all 12 TN_THPT subjects without crash', () => {
+  it('enriches all TN_THPT subjects without crash', () => {
     for (const meta of TN_THPT_SUBJECTS) {
       const structure = getDefaultStructure(meta.code);
       assert.ok(structure, meta.code);

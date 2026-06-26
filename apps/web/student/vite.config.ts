@@ -45,6 +45,7 @@ export default defineConfig({
     open: '/student/',
     proxy: {
       '/api': apiTarget,
+      '/uploads': apiTarget,
       '/socket.io': { target: apiTarget, ws: true },
       '/proctoring': { target: apiTarget, ws: true },
     },

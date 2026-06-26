@@ -2,7 +2,7 @@
 
 > **Tại VVK:** thí sinh dùng Chrome/Edge kiosk — xem `docs/BROWSER-KIOSK.md`. SEB không bắt buộc.
 
-**Tác giả:** Trương Minh Khiêm · **Đơn vị:** THPT Võ Văn Kiệt — Cà Mau
+**Tác giả:** Trương Minh Khiêm · **Đơn vị:** THPT Võ Văn Kiệt
 
 ## Yêu cầu
 

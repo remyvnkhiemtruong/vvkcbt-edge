@@ -72,7 +72,7 @@ export function AppealsTab({ token, examSessionId }: { token: string; examSessio
         />
         <input
           className="cbt-input"
-          placeholder="Môn (MATH, LITERATURE…)"
+          placeholder="Môn (MATH, ENGLISH…)"
           value={form.subjectCode}
           onChange={(e) => setForm((f) => ({ ...f, subjectCode: e.target.value }))}
         />

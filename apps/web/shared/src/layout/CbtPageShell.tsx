@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { APP_AUTHOR, SCHOOL_NAME, vi, isProductionUi } from '../i18n/vi';
+import { SCHOOL_NAME, vi, isProductionUi } from '../i18n/vi';
 
 
 
@@ -21,6 +21,8 @@ interface CbtPageShellProps {
   totalPages?: number;
 
   darkBody?: boolean;
+
+  wide?: boolean;
 
   variant?: 'production' | 'spec';
 
@@ -45,6 +47,8 @@ export function CbtPageShell({
   totalPages = 24,
 
   darkBody = false,
+
+  wide = false,
 
   variant,
 
@@ -72,7 +76,7 @@ export function CbtPageShell({
 
       )}
 
-      <div className={`cbt-app-window ${darkBody ? 'cbt-app-window--dark' : ''}`}>
+      <div className={`cbt-app-window ${darkBody ? 'cbt-app-window--dark' : ''} ${wide ? 'cbt-app-window--wide' : ''}`}>
 
         <header className="cbt-app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -86,9 +90,7 @@ export function CbtPageShell({
 
         <footer className="cbt-app-footer">
 
-          <span>
-            © {APP_AUTHOR} · {production ? vi.footerPublic : `${SCHOOL_NAME} — ${vi.footerDoc}`}
-          </span>
+          <span>{production ? vi.copyrightFooter : `${SCHOOL_NAME} — ${vi.footerDoc}`}</span>
 
           {!production && pageNumber != null && (
 
@@ -116,7 +118,9 @@ export function CbtPageShell({
 
         .cbt-app-window { max-width: 1100px; margin: 0 auto; background: var(--cbt-surface); border-radius: var(--cbt-radius); box-shadow: var(--cbt-shadow); overflow: hidden; border: 1px solid var(--cbt-border); }
 
-        .cbt-app-window--dark .cbt-app-body { background: var(--cbt-navy); }
+        .cbt-app-window--wide { max-width: min(1440px, 98vw); }
+
+        .cbt-app-window--dark .cbt-app-body { background: #1a2d4a; color: #f1f5f9; }
 
         .cbt-app-header { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.25rem; background: var(--cbt-navy); color: #fff; }
 

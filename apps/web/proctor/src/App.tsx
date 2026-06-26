@@ -1,25 +1,22 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import {
   CbtPageShell,
-  CbtMachineCard,
   CbtBrandLogo,
-  mapProctorStatus,
   vi,
   isProductionUi,
   getSubjectNameVi,
-  formatSlotStatus,
   ApiStatusBanner,
 } from '@shared/index';
-import { GradingTab } from './post-exam/GradingTab';
 import { AuditTab } from './post-exam/AuditTab';
 import { BackupTab } from './post-exam/BackupTab';
 import { ReportTab } from './post-exam/ReportTab';
-import { AppealsTab } from './post-exam/AppealsTab';
 import { SystemTab } from './post-exam/SystemTab';
 import { RoomScoreSheetTab } from './post-exam/RoomScoreSheetTab';
 import { EndSubjectSessionPanel } from './post-exam/EndSubjectSessionPanel';
 import { ScoreboardOverlay, readAutoScoreboardEnabled, type SubjectRoomCompleteData } from './post-exam/ScoreboardOverlay';
 import { StudentDetailPanel, type GridItemExtended } from './post-exam/StudentDetailPanel';
+import { ProctorStudentTable } from './monitor/ProctorStudentTable';
+import { buildMonitorRows } from './monitor/proctor-monitor-utils';
 import { useProctorSocket } from './hooks/useProctorSocket';
 import { PreflightChecklist } from './prep/PreflightChecklist';
 import {
@@ -33,7 +30,7 @@ import {
   isProctorTokenUsable,
 } from './api';
 
-type ProctorMode = 'prep' | 'monitor' | 'schedule' | 'grading' | 'report' | 'appeals' | 'roomsheet' | 'endsession' | 'audit' | 'backup' | 'system';
+type ProctorMode = 'prep' | 'monitor' | 'report' | 'roomsheet' | 'endsession' | 'audit' | 'backup' | 'system';
 
 const ProctorActionType = {
   LOCK_EXAM: 'lock_exam',
@@ -134,14 +131,14 @@ function ProctorPrep({
   onSessionExpired,
 }: {
   token: string;
-  onReady: (examSessionId: string) => void;
+  onReady: (examSessionId: string, subjectCodes?: string[]) => void;
   onSessionExpired?: () => void;
 }) {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importStatus, setImportStatus] = useState<{
     subjects: ImportStatusRow[];
     importedSubjects: string[];
-    pendingSubjects: string[];
+    pendingSubjects?: string[];
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
@@ -218,7 +215,7 @@ function ProctorPrep({
     if (
       packageStatus?.needsImportConfirm &&
       !window.confirm(
-        'Đã có ca thi trên máy — import sẽ xóa dữ liệu ca hiện tại và bắt đầu ca mới. Tiếp tục?',
+        'Đã có ca thi trên máy — import khung giờ khác sẽ xóa dữ liệu ca hiện tại. Cùng khung giờ sẽ gộp thêm môn. Tiếp tục?',
       )
     ) {
       e.target.value = '';
@@ -236,7 +233,7 @@ function ProctorPrep({
       setImportResult(result);
       localStorage.setItem(SESSION_KEY, result.examSessionId);
       await fetchImportStatus(result.examSessionId);
-      onReady(result.examSessionId);
+      onReady(result.examSessionId, result.importedSubjects ?? (result.subjectCode ? [result.subjectCode] : undefined));
       const statusRes = await proctorFetch('/proctor/packages/status', token);
       setPackageStatus(await statusRes.json());
     } catch (err) {
@@ -247,10 +244,21 @@ function ProctorPrep({
     }
   };
 
+  const resolveSubjectCodes = async (examSessionId: string): Promise<string[] | undefined> => {
+    try {
+      const res = await proctorFetch('/proctor/sessions/current/import-status', token);
+      const data = await res.json();
+      return data.importedSubjects ?? data.subjects?.map((s: { code: string }) => s.code);
+    } catch {
+      return undefined;
+    }
+  };
+
   const useExisting = async () => {
     const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
-      onReady(stored);
+      const codes = await resolveSubjectCodes(stored);
+      onReady(stored, codes);
       return;
     }
     try {
@@ -258,7 +266,8 @@ function ProctorPrep({
       const data = await res.json();
       if (data.examSessionId) {
         localStorage.setItem(SESSION_KEY, data.examSessionId);
-        onReady(data.examSessionId);
+        const codes = await resolveSubjectCodes(data.examSessionId);
+        onReady(data.examSessionId, codes);
         return;
       }
       showToast('error', 'Chưa có ca thi — import gói ZIP trước');
@@ -276,7 +285,8 @@ function ProctorPrep({
       )}
       <h2>Chuẩn bị kỳ thi</h2>
       <p className="admin-hint">
-        Mỗi USB = <strong>một môn, một ca</strong>. Import USB mới sẽ thay ca hiện tại trên máy (nên xuất gói phòng thi tab Báo cáo nếu cần lưu kết quả).
+        Mỗi thí sinh chỉ thi <strong>một môn</strong>. Các môn <strong>cùng khung giờ</strong> có thể import nhiều USB
+        (mỗi USB một môn) — hệ thống tự gộp vào một ca. Import khung giờ khác sẽ thay ca hiện tại (nên xuất gói phòng thi trước).
       </p>
       <div className="proctor-prep-actions">
         <button type="button" className="cbt-btn cbt-btn-outline" onClick={downloadTemplate} disabled={busy}>
@@ -340,30 +350,19 @@ function ProctorPrep({
       )}
       {importStatus && importStatus.subjects.length > 0 && (
         <div className="proctor-import-checklist" style={{ marginTop: '1rem' }}>
-          <h3>Môn đã import / chưa import</h3>
-          <table className="cbt-table" style={{ fontSize: '0.85rem' }}>
-            <thead>
-              <tr>
-                <th>Môn</th>
-                <th>Đề</th>
-                <th>Thí sinh</th>
-                <th>Giờ mở</th>
-              </tr>
-            </thead>
-            <tbody>
-              {importStatus.subjects.map((s) => (
-                <tr key={s.code}>
-                  <td>{s.nameVi}</td>
-                  <td style={{ color: s.hasPaper ? '#86efac' : '#fca5a5' }}>{s.hasPaper ? '✓' : '○'}</td>
-                  <td style={{ color: s.hasCredentials ? '#86efac' : '#fca5a5' }}>{s.hasCredentials ? '✓' : '○'}</td>
-                  <td>{s.scheduledStart ? new Date(s.scheduledStart).toLocaleString('vi-VN') : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {importStatus.pendingSubjects.length > 0 && (
-            <p className="admin-hint">
-              Chưa import: {importStatus.pendingSubjects.map((c) => getSubjectNameVi(c)).join(', ')}
+          <h3>Ca thi hiện tại</h3>
+          {importStatus.subjects.map((s) => (
+            <p key={s.code} className="admin-hint">
+              Môn: <strong>{s.nameVi}</strong>
+              {' · '}
+              Đề: {s.hasPaper ? '✓' : '○'}
+              {' · '}
+              Thí sinh: {s.hasCredentials ? '✓' : '○'}
+            </p>
+          ))}
+          {importStatus.pendingSubjects && importStatus.pendingSubjects.length > 0 && (
+            <p className="admin-hint" style={{ color: '#fde68a' }}>
+              Chưa có đề: {importStatus.pendingSubjects.map((c) => getSubjectNameVi(c)).join(', ')}
             </p>
           )}
         </div>
@@ -376,13 +375,7 @@ function ProctorPrep({
           </p>
           {importResult.subjectCode && (
             <p className="admin-hint">
-              ZIP môn: <strong>{importResult.subjectCode}</strong>
-              {importResult.exportScope === 'single_subject' ? ' (niêm phong từng môn)' : ''}
-            </p>
-          )}
-          {importResult.pendingSubjects && importResult.pendingSubjects.length > 0 && (
-            <p className="admin-hint" style={{ color: '#fcd34d' }}>
-              Còn thiếu môn: {importResult.pendingSubjects.map((c) => getSubjectNameVi(c)).join(', ')}
+              Môn thi: <strong>{getSubjectNameVi(importResult.subjectCode)}</strong>
             </p>
           )}
           <p className="admin-hint">
@@ -441,21 +434,18 @@ export default function App() {
     localStorage.getItem(SESSION_KEY) ? 'monitor' : 'prep',
   );
   const [roomName, setRoomName] = useState('Phòng máy số 1');
-  const [capacity, setCapacity] = useState(30);
   const [grid, setGrid] = useState<GridItem[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
   const [gridSearch, setGridSearch] = useState('');
   const [gridFilter, setGridFilter] = useState<
     'all' | 'active' | 'submitted' | 'offline' | 'violation' | 'help'
   >('all');
-  const [monitorSubject, setMonitorSubject] = useState('');
+  const [sessionSubjectCodes, setSessionSubjectCodes] = useState<string[]>([]);
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
+  const [monitorSubjectFilter, setMonitorSubjectFilter] = useState('');
   const [helpSbds, setHelpSbds] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<GridItem | null>(null);
-  const [serverTime, setServerTime] = useState('');
-  const [subjectSchedule, setSubjectSchedule] = useState<
-    Array<{ subjectCode: string; scheduledStart: string; scheduledEnd: string; status: string; slotId: string }>
-  >([]);
   const [scoreboardData, setScoreboardData] = useState<SubjectRoomCompleteData | null>(null);
   const [scoreboardToast, setScoreboardToast] = useState<string | null>(null);
   const production = isProductionUi();
@@ -510,7 +500,6 @@ export default function App() {
           setExamSessionId(ctx.examSessionId);
         }
         setRoomName(ctx.roomName);
-        setCapacity(ctx.capacity);
       })
       .catch(() => {});
 
@@ -529,26 +518,22 @@ export default function App() {
   useEffect(() => {
     if (!authed || !examSessionId || !token) return;
 
-    const loadSchedule = () => {
-      proctorFetch(`/proctor/sessions/${examSessionId}/subject-schedule`, token)
-        .then((r) => r.json())
-        .then((d) => {
-          setServerTime(d.serverTime ?? '');
-          setSubjectSchedule(d.subjects ?? []);
-        })
-        .catch((err) => {
-          if (err instanceof Error && err.message === SESSION_EXPIRED_MSG) handleSessionExpired();
-        });
-    };
-    loadSchedule();
-    const schedIv = setInterval(loadSchedule, 15000);
-    return () => clearInterval(schedIv);
+    proctorFetch(`/proctor/sessions/current/import-status`, token)
+      .then((r) => r.json())
+      .then((d: { importedSubjects?: string[]; subjects?: Array<{ code: string }> }) => {
+        const codes = d.importedSubjects ?? d.subjects?.map((s) => s.code) ?? [];
+        setSessionSubjectCodes(codes);
+        setSelectedSubjectCode((prev) => (prev && codes.includes(prev) ? prev : codes[0] ?? ''));
+      })
+      .catch((err) => {
+        if (err instanceof Error && err.message === SESSION_EXPIRED_MSG) handleSessionExpired();
+      });
   }, [examSessionId, authed, token]);
 
   useProctorSocket({
     token,
     examSessionId,
-    monitorSubject: monitorSubject || undefined,
+    monitorSubject: monitorSubjectFilter || undefined,
     onConnectedChange: setConnected,
     onSessionExpired: handleSessionExpired,
     onGridUpdate: setGrid,
@@ -620,7 +605,7 @@ export default function App() {
 
   if (sessionChecking) {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody>
+      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
         <p className="admin-hint" style={{ padding: '2rem', color: '#e2e8f0' }}>
           Đang xác minh phiên đăng nhập…
         </p>
@@ -665,7 +650,7 @@ export default function App() {
 
   if (mode === 'prep' || !examSessionId) {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody>
+      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
         <div className="proctor-toolbar">
           <button type="button" className="cbt-btn cbt-btn-outline" onClick={handleLogout}>
             Đăng xuất
@@ -673,8 +658,12 @@ export default function App() {
         </div>
         <ProctorPrep
           token={token}
-          onReady={(id) => {
+          onReady={(id, subjectCodes) => {
             setExamSessionId(id);
+            if (subjectCodes?.length) {
+              setSessionSubjectCodes(subjectCodes);
+              setSelectedSubjectCode(subjectCodes[0]);
+            }
             setMode('monitor');
           }}
           onSessionExpired={handleSessionExpired}
@@ -694,17 +683,14 @@ export default function App() {
     </button>
   );
 
-  if (mode !== 'monitor' && mode !== 'schedule') {
+  if (mode !== 'monitor') {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody>
+      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
         <div className="proctor-toolbar proctor-mode-nav">
           {modeNav('monitor', 'Giám sát')}
-          {modeNav('schedule', 'Lịch môn')}
-          {modeNav('grading', 'Chấm bài')}
           {modeNav('report', 'Báo cáo')}
-          {modeNav('appeals', 'Phúc khảo')}
           {modeNav('roomsheet', 'Biên bản phòng')}
-          {modeNav('endsession', 'Kết thúc ca')}
+          {modeNav('endsession', 'Kết thúc ca thi')}
           {modeNav('audit', 'Nhật ký')}
           {modeNav('backup', 'Sao lưu')}
           {modeNav('system', 'Hệ thống')}
@@ -713,16 +699,24 @@ export default function App() {
             Đăng xuất
           </button>
         </div>
-        {mode === 'grading' && <GradingTab token={token} examSessionId={examSessionId} />}
         {mode === 'report' && <ReportTab token={token} examSessionId={examSessionId} />}
-        {mode === 'appeals' && <AppealsTab token={token} examSessionId={examSessionId} />}
         {mode === 'roomsheet' && (
-          <RoomScoreSheetTab token={token} examSessionId={examSessionId} defaultRoom={roomName} />
+          <RoomScoreSheetTab
+            token={token}
+            examSessionId={examSessionId}
+            subjectCodes={sessionSubjectCodes}
+            subjectCode={selectedSubjectCode}
+            onSubjectCodeChange={setSelectedSubjectCode}
+            defaultRoom={roomName}
+          />
         )}
         {mode === 'endsession' && (
           <EndSubjectSessionPanel
             token={token}
             examSessionId={examSessionId}
+            subjectCodes={sessionSubjectCodes}
+            subjectCode={selectedSubjectCode}
+            onSubjectCodeChange={setSelectedSubjectCode}
             defaultRoom={roomName}
             onComplete={(data) => setScoreboardData(data)}
           />
@@ -732,100 +726,13 @@ export default function App() {
         {mode === 'system' && <SystemTab token={token} />}
         <style>{`
           .proctor-mode-nav { flex-wrap: wrap; justify-content: flex-start; gap: 0.35rem; margin-bottom: 1rem; }
-          .proctor-tab-panel { color: #fff; padding: 0.5rem 0; }
-          .proctor-tab-panel h3 { margin-top: 0; }
         `}</style>
       </CbtPageShell>
     );
   }
 
-  if (mode === 'schedule') {
-    return (
-      <CbtPageShell
-        headerTitle={vi.proctor.title}
-        headerLeft={<CbtBrandLogo size={40} logoUrl="/proctor/branding/logo.png" />}
-        darkBody
-      >
-        <div className="proctor-toolbar proctor-mode-nav">
-          {modeNav('monitor', 'Giám sát')}
-          {modeNav('schedule', 'Lịch môn')}
-          {modeNav('grading', 'Chấm bài')}
-          {modeNav('report', 'Báo cáo')}
-          {modeNav('appeals', 'Phúc khảo')}
-          {modeNav('roomsheet', 'Biên bản phòng')}
-          {modeNav('endsession', 'Kết thúc ca')}
-          {modeNav('audit', 'Nhật ký')}
-          {modeNav('backup', 'Sao lưu')}
-          {modeNav('system', 'Hệ thống')}
-          <button type="button" className="cbt-btn cbt-btn-outline" style={{ marginLeft: 'auto' }} onClick={handleLogout}>
-            Đăng xuất
-          </button>
-        </div>
-        <div style={{ color: '#fff', marginBottom: '1rem' }}>
-          <strong>Giờ máy chủ:</strong>{' '}
-          {serverTime ? new Date(serverTime).toLocaleString('vi-VN') : '—'}
-        </div>
-        <table className="cbt-table" style={{ color: '#fff' }}>
-          <thead>
-            <tr>
-              <th>Môn</th>
-              <th>Giờ mở</th>
-              <th>Giờ kết thúc</th>
-              <th>Trạng thái</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {subjectSchedule.map((row) => {
-              const canOpen =
-                row.status === 'scheduled' && serverTime && new Date(serverTime) >= new Date(row.scheduledStart);
-              const dueSoon =
-                row.status === 'scheduled' && serverTime && new Date(serverTime) >= new Date(row.scheduledStart);
-              return (
-                <tr key={row.subjectCode} style={dueSoon ? { background: 'rgba(251, 191, 36, 0.15)' } : undefined}>
-                  <td>{getSubjectNameVi(row.subjectCode)}</td>
-                  <td>{new Date(row.scheduledStart).toLocaleString('vi-VN')}</td>
-                  <td>{new Date(row.scheduledEnd).toLocaleString('vi-VN')}</td>
-                  <td title="release_mode: proctor_at_time — giám thị mở đề thủ công">
-                    {formatSlotStatus(row.status)}
-                    {dueSoon && row.status !== 'open' ? ` ⚠ ${vi.proctor.dueSoon}` : ''}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="cbt-btn cbt-btn-primary"
-                      disabled={!canOpen}
-                      onClick={async () => {
-                        try {
-                          await proctorFetch(`/proctor/slots/${row.slotId}/open-early`, token, {
-                            method: 'POST',
-                          });
-                          setSubjectSchedule((prev) =>
-                            prev.map((s) =>
-                              s.subjectCode === row.subjectCode ? { ...s, status: 'open' } : s,
-                            ),
-                          );
-                        } catch (err) {
-                          if (err instanceof Error && err.message === SESSION_EXPIRED_MSG) {
-                            handleSessionExpired();
-                          }
-                        }
-                      }}
-                    >
-                      Mở đề
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </CbtPageShell>
-    );
-  }
-
-  const displayGrid: GridItem[] = [];
   const matchesGrid = (item: GridItem) => {
+    if (monitorSubjectFilter && item.subjectCode !== monitorSubjectFilter) return false;
     const q = gridSearch.trim().toLowerCase();
     if (q) {
       const account = (item.examAccount ?? '').toLowerCase();
@@ -841,42 +748,26 @@ export default function App() {
     return true;
   };
 
-  for (let i = 1; i <= capacity; i++) {
-    const item = grid[i - 1];
-    if (item) {
-      if (matchesGrid(item)) displayGrid.push(item);
-    } else if (gridFilter === 'all' && !gridSearch.trim()) {
-      displayGrid.push({
-        id: `empty-${i}`,
-        sbd: '',
-        status: 'NOT_LOGGED_IN',
-        violations: 0,
-        locked: false,
-        submitted: false,
-      });
-    }
-  }
+  const monitorRows = buildMonitorRows(grid, matchesGrid);
 
   return (
     <CbtPageShell
       featureTitle={production ? undefined : 'TÍNH NĂNG 10. BẢNG ĐIỀU KHIỂN GIÁM THỊ'}
       headerTitle={vi.proctor.title}
       headerLeft={<CbtBrandLogo size={40} logoUrl="/proctor/branding/logo.png" />}
-      headerRight={`${roomName} | Sĩ số: ${capacity}`}
+      headerRight={`${roomName} | Thí sinh: ${grid.length}`}
       pageNumber={production ? undefined : 10}
       darkBody
+      wide
     >
       <div className="proctor-toolbar proctor-mode-nav">
         <span className={`proctor-ws ${connected ? 'on' : 'off'}`}>
           {connected ? '● Kết nối realtime' : '○ Mất kết nối WS'}
         </span>
         {modeNav('monitor', 'Giám sát')}
-        {modeNav('schedule', 'Lịch môn')}
-        {modeNav('grading', 'Chấm bài')}
         {modeNav('report', 'Báo cáo')}
-        {modeNav('appeals', 'Phúc khảo')}
         {modeNav('roomsheet', 'Biên bản phòng')}
-        {modeNav('endsession', 'Kết thúc ca')}
+        {modeNav('endsession', 'Kết thúc ca thi')}
         {modeNav('audit', 'Nhật ký')}
         {modeNav('backup', 'Sao lưu')}
         {modeNav('system', 'Hệ thống')}
@@ -894,7 +785,7 @@ export default function App() {
       </div>
 
       {scoreboardToast && (
-        <div className="proctor-alert" style={{ background: '#dcfce7', borderColor: '#16a34a' }}>
+        <div className="proctor-alert proctor-alert--success">
           {scoreboardToast}
         </div>
       )}
@@ -909,34 +800,31 @@ export default function App() {
         </div>
       )}
 
-      <div className="proctor-monitor-layout">
       <div className="proctor-monitor-main">
       <div className="proctor-grid-tools">
         <input
-          className="cbt-input"
+          className="cbt-input proctor-input"
           placeholder="Tìm SBD hoặc 4 số cuối TK..."
           value={gridSearch}
           onChange={(e) => setGridSearch(e.target.value)}
-          style={{ maxWidth: 200 }}
         />
         <select
-          className="cbt-input"
-          value={monitorSubject}
-          onChange={(e) => setMonitorSubject(e.target.value)}
-          style={{ maxWidth: 140 }}
+          className="cbt-input proctor-input proctor-input--filter"
+          value={monitorSubjectFilter}
+          onChange={(e) => setMonitorSubjectFilter(e.target.value)}
+          title="Lọc theo môn"
         >
           <option value="">Tất cả môn</option>
-          {subjectSchedule.map((s) => (
-            <option key={s.subjectCode} value={s.subjectCode}>
-              {getSubjectNameVi(s.subjectCode)}
+          {sessionSubjectCodes.map((code) => (
+            <option key={code} value={code}>
+              {getSubjectNameVi(code)}
             </option>
           ))}
         </select>
         <select
-          className="cbt-input"
+          className="cbt-input proctor-input proctor-input--filter"
           value={gridFilter}
           onChange={(e) => setGridFilter(e.target.value as typeof gridFilter)}
-          style={{ maxWidth: 160 }}
         >
           <option value="all">{vi.proctor.filterAll}</option>
           <option value="active">{vi.proctor.filterActive}</option>
@@ -947,45 +835,20 @@ export default function App() {
         </select>
       </div>
 
-      <div className="proctor-grid">
-        {displayGrid.map((item, idx) => {
-          const { machineStatus, label } = mapProctorStatus(item.status, item.violations);
-          const pct =
-            item.questionCount && item.questionCount > 0 && item.answeredCount != null
-              ? Math.round((item.answeredCount / item.questionCount) * 100)
-              : null;
-          const helpFlag = helpSbds.has(item.sbd);
-          const cardLabel = item.sbd
-            ? `SBD ${item.sbd}${item.submitted && item.scoreTotal != null ? ` · ${item.scoreTotal}đ` : ''}${pct != null && !item.submitted ? ` · ${pct}%` : ''}${item.violations ? ` · ${item.violations} VP` : ''}${helpFlag ? ' · 🆘' : ''}`
-            : label;
-          return (
-            <CbtMachineCard
-              key={item.id}
-              machineNo={idx + 1}
-              status={machineStatus}
-              label={cardLabel}
-              onClick={() => item.sbd && setSelected(item)}
-            />
-          );
-        })}
-      </div>
+      <ProctorStudentTable
+        rows={monitorRows}
+        helpSbds={helpSbds}
+        onSelect={setSelected}
+        onAction={(id, act, payload) => void action(id, act, payload)}
+      />
 
       {selected && selected.sbd && (
         <>
           <StudentDetailPanel
             item={selected}
-            token={token}
             onClose={() => setSelected(null)}
-            onScoreSaved={(id, scoreTotal, partScores) => {
-              setGrid((prev) =>
-                prev.map((g) => (g.id === id ? { ...g, scoreTotal, partScores, manualOverride: true } : g)),
-              );
-              setSelected((sel) =>
-                sel && sel.id === id ? { ...sel, scoreTotal, partScores, manualOverride: true } : sel,
-              );
-            }}
           />
-          <div className="proctor-action-panel" style={{ marginTop: '0.75rem' }}>
+          <div className="proctor-action-panel">
             <div className="proctor-actions">
               <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => action(selected.id, ProctorActionType.LOCK_EXAM)}>
                 Khóa bài
@@ -1008,56 +871,9 @@ export default function App() {
       )}
       </div>
 
-      <aside className="proctor-mini-scoreboard">
-        <h4>Bảng điểm nhanh</h4>
-        <p className="admin-hint" style={{ fontSize: '0.75rem' }}>
-          {monitorSubject ? getSubjectNameVi(monitorSubject) : 'Tất cả môn'}
-        </p>
-        <ol>
-          {grid
-            .filter((g) => g.submitted && g.sbd && (!monitorSubject || g.subjectCode === monitorSubject))
-            .sort((a, b) => (b.scoreTotal ?? 0) - (a.scoreTotal ?? 0))
-            .slice(0, 12)
-            .map((g) => (
-              <li key={g.id}>
-                <span>{g.sbd}</span>
-                <span>{g.pendingManual ? 'Chờ chấm' : g.scoreTotal != null ? `${g.scoreTotal}` : '—'}</span>
-              </li>
-            ))}
-        </ol>
-        {scoreboardData && (
-          <button type="button" className="cbt-btn cbt-btn-outline" style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.8rem' }} onClick={() => setScoreboardData({ ...scoreboardData })}>
-            Mở bảng điểm đầy đủ
-          </button>
-        )}
-      </aside>
-      </div>
-
       {scoreboardData && (
         <ScoreboardOverlay data={scoreboardData} token={token} onClose={() => setScoreboardData(null)} />
       )}
-
-      <style>{`
-        .proctor-toolbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-        .proctor-mode-nav { justify-content: flex-start; }
-        .proctor-ws.on { color: #16a34a; }
-        .proctor-ws.off { color: #94a3b8; }
-        .proctor-alerts { margin-bottom: 1rem; }
-        .proctor-monitor-layout { display: flex; gap: 1rem; align-items: flex-start; }
-        .proctor-monitor-main { flex: 1; min-width: 0; }
-        .proctor-mini-scoreboard {
-          width: 200px; flex-shrink: 0; background: #1e293b; border-radius: 8px; padding: 0.75rem;
-          color: #e2e8f0; max-height: 70vh; overflow: auto;
-        }
-        .proctor-mini-scoreboard h4 { margin: 0 0 0.35rem; font-size: 0.9rem; }
-        .proctor-mini-scoreboard ol { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; }
-        .proctor-mini-scoreboard li { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.2rem; }
-        .proctor-grid-tools { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-        .proctor-alert { background: #fef3c7; border: 1px solid #f59e0b; padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 0.35rem; font-size: 0.85rem; }
-        .proctor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem; }
-        .proctor-action-panel { margin-top: 1.5rem; padding: 1rem; background: #1e293b; border-radius: 8px; color: #fff; }
-        .proctor-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
-      `}</style>
     </CbtPageShell>
   );
 }

@@ -4,7 +4,6 @@ import {
   Get,
   Patch,
   Body,
-  Param,
   Req,
   UseGuards,
   BadRequestException,
@@ -20,6 +19,7 @@ import { Repository } from 'typeorm';
 import { StudentSessionStatus, AuditEventType } from '@vnu/shared-types';
 import { AuditService } from '../../shared/audit/audit.service';
 import { IdempotencyInterceptor } from '../../shared/idempotency/idempotency.interceptor';
+import { getClientIpFromRequest } from '../../shared/utils/client-ip';
 
 interface AuthRequest extends Request {
   studentSession: StudentSession;
@@ -35,7 +35,7 @@ export class StudentAuthController {
   ) {}
 
   private getClientIp(req: Request): string {
-    return (req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '') as string;
+    return getClientIpFromRequest(req);
   }
 
   @Get('room-context')
@@ -48,19 +48,6 @@ export class StudentAuthController {
     const account = (dto.examAccount ?? dto.sbd ?? '').trim();
     if (!account) throw new BadRequestException('Thiếu tài khoản thi');
     return this.authService.login(account, dto.pin, dto.examSessionId, this.getClientIp(req));
-  }
-
-  @Get('slots')
-  @UseGuards(StudentAuthGuard)
-  async listSlots(@Req() req: AuthRequest) {
-    const session = req.studentSession;
-    return this.authService.listSlots(session);
-  }
-
-  @Post('slots/:slotId/start')
-  @UseGuards(StudentAuthGuard)
-  async startSlot(@Req() req: AuthRequest, @Param('slotId') slotId: string) {
-    return this.authService.startSlot(req.studentSession, slotId);
   }
 
   @Get('exam')
@@ -136,12 +123,6 @@ export class StudentAuthController {
     }
     await this.sessionRepo.save(session);
     return { violations: violations.count, status: session.status, synced: body.events?.length ?? 0 };
-  }
-
-  @Get('prefetch/:slotId')
-  @UseGuards(StudentAuthGuard)
-  async prefetch(@Req() req: AuthRequest, @Param('slotId') slotId: string) {
-    return this.authService.prefetchSlot(req.studentSession, slotId);
   }
 
   @Post('heartbeat')

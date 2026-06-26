@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 config({ path: resolve(__dirname, '../../../.env') });
@@ -33,7 +34,10 @@ function parseCorsOrigins(): string[] | boolean {
 
 async function bootstrap() {
   validateProductionSecrets();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
+  const uploadDir = process.env.UPLOAD_DIR || resolve(__dirname, '../../../uploads');
+  app.useStaticAssets(uploadDir, { prefix: '/uploads/' });
   app.setGlobalPrefix('api');
   const origins = parseCorsOrigins();
   app.enableCors({

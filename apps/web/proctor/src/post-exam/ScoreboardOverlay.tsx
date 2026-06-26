@@ -11,7 +11,6 @@ export interface ScoreboardRow {
   part3: string | number;
   total: string | number;
   note?: string;
-  pendingManual?: boolean;
 }
 
 export interface SubjectRoomCompleteData {
@@ -142,13 +141,7 @@ export function ScoreboardOverlay({
                   <td>{r.part1}</td>
                   <td>{r.part2}</td>
                   <td>{r.part3}</td>
-                  <td>
-                    {r.pendingManual ? (
-                      <span className="scoreboard-badge scoreboard-badge--pending">Chờ chấm</span>
-                    ) : (
-                      r.total
-                    )}
-                  </td>
+                  <td>{r.total ?? '—'}</td>
                   <td>{r.note ?? ''}</td>
                 </tr>
               ))}

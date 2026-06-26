@@ -10,7 +10,6 @@ interface ExamState {
   locked: boolean;
   submitted: boolean;
   rulesAccepted: boolean;
-  showSlots: boolean;
   scoreResult: {
     total: number;
     breakdown?: unknown[];
@@ -23,26 +22,22 @@ interface ExamState {
       maxPart2: number;
       maxPart3: number;
     };
-    pendingManual?: boolean;
   } | null;
-  hasMoreSlots: boolean;
   sbd: string | null;
   examAccount: string | null;
   setAuth: (
     token: string,
     sessionId: string,
-    opts?: { hasPersonalSlots?: boolean; subjectCode?: string | null; sbd?: string; examAccount?: string | null },
+    opts?: { subjectCode?: string | null; sbd?: string; examAccount?: string | null },
   ) => void;
   setExam: (exam: Record<string, unknown>) => void;
   setAnswer: (questionId: string, answer: unknown) => void;
   setAnswers: (answers: Record<string, unknown>) => void;
   setViolations: (n: number) => void;
   setLocked: (v: boolean) => void;
-  setSubmitted: (result: ExamState['scoreResult'] & object, hasMoreSlots?: boolean) => void;
-  continueToWaitingRoom: () => void;
+  setSubmitted: (result: ExamState['scoreResult'] & object) => void;
   setExamSessionId: (id: string) => void;
   setRulesAccepted: (v: boolean) => void;
-  setShowSlots: (v: boolean) => void;
   syncStatus: 'synced' | 'local' | 'offline' | 'syncing';
   setSyncStatus: (status: ExamState['syncStatus']) => void;
   logout: () => void;
@@ -58,9 +53,7 @@ export const useExamStore = create<ExamState>((set) => ({
   locked: false,
   submitted: false,
   rulesAccepted: false,
-  showSlots: false,
   scoreResult: null,
-  hasMoreSlots: false,
   sbd: null,
   examAccount: null,
   syncStatus: 'synced',
@@ -71,7 +64,6 @@ export const useExamStore = create<ExamState>((set) => ({
       token,
       sessionId,
       rulesAccepted: false,
-      showSlots: !!opts?.hasPersonalSlots,
       sbd: opts?.sbd ?? null,
       examAccount: opts?.examAccount ?? null,
     });
@@ -82,30 +74,32 @@ export const useExamStore = create<ExamState>((set) => ({
   setAnswers: (answers) => set({ answers }),
   setViolations: (violations) => set({ violations }),
   setLocked: (locked) => set({ locked }),
-  setSubmitted: (
-    scoreResult: ExamState['scoreResult'] & object,
-    hasMoreSlots = false,
-  ) => set({ submitted: true, scoreResult, hasMoreSlots }),
-  continueToWaitingRoom: () =>
-    set({
-      submitted: false,
-      scoreResult: null,
-      hasMoreSlots: false,
-      exam: null,
-      answers: {},
-      rulesAccepted: false,
-      showSlots: true,
-    }),
+  setSubmitted: (scoreResult: ExamState['scoreResult'] & object) =>
+    set({ submitted: true, scoreResult }),
   setExamSessionId: (examSessionId) => {
     localStorage.setItem('vnu_exam_session_id', examSessionId);
     set({ examSessionId });
   },
   setRulesAccepted: (rulesAccepted) => set({ rulesAccepted }),
-  setShowSlots: (showSlots) => set({ showSlots }),
   setSyncStatus: (syncStatus) => set({ syncStatus }),
   logout: () => {
     localStorage.removeItem('vnu_token');
     localStorage.removeItem('vnu_session_id');
-    set({ token: null, sessionId: null, exam: null, rulesAccepted: false, showSlots: false });
+    localStorage.removeItem('vnu_exam_session_id');
+    set({
+      token: null,
+      sessionId: null,
+      examSessionId: '',
+      exam: null,
+      answers: {},
+      violations: 0,
+      locked: false,
+      submitted: false,
+      scoreResult: null,
+      rulesAccepted: false,
+      sbd: null,
+      examAccount: null,
+      syncStatus: 'synced',
+    });
   },
 }));

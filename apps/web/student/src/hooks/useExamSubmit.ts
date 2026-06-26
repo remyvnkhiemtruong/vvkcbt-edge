@@ -29,7 +29,7 @@ export function useExamSubmit(sessionId: string | null) {
 
   const finishSubmit = useCallback(
     (result: Record<string, unknown>) => {
-      setSubmitted(result, !!(result as { hasMoreSlots?: boolean }).hasMoreSlots);
+      setSubmitted(result);
       setGracePeriod(false);
       setConfirmSubmit(false);
       stopRetry();
