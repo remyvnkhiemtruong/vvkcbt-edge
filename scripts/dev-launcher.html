@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VVKCBT — Dev Launcher</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .card { background: #1e293b; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 1rem; margin: 0 0 0.75rem; color: #38bdf8; }
+    a.btn {
+      display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0;
+      padding: 0.5rem 1rem; background: #2563eb; color: #fff;
+      text-decoration: none; border-radius: 6px; font-size: 0.9rem;
+    }
+    a.btn:hover { background: #1d4ed8; }
+    a.btn.outline { background: transparent; border: 1px solid #475569; color: #cbd5e1; }
+    #health { font-size: 0.85rem; white-space: pre-wrap; }
+    #creds { font-size: 0.85rem; color: #a5f3fc; }
+    .ok { color: #86efac; }
+    .err { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <h1>VVKCBT — Dev Launcher</h1>
+  <p class="sub">THPT Võ Văn Kiệt · Trương Minh Khiêm</p>
+
+  <div class="card">
+    <h2>Ứng dụng</h2>
+    <a class="btn" href="http://127.0.0.1:5173/student/" target="_blank">CBT — Thí sinh</a>
+    <a class="btn" href="http://127.0.0.1:5174/proctor/" target="_blank">CBT — Viewer (Giám thị)</a>
+    <a class="btn outline" href="http://127.0.0.1:3000/api/infra/health" target="_blank">API Health</a>
+    <a class="btn outline" href="./waiting-room-diagnostic.html">Chẩn đoán phòng chờ</a>
+  </div>
+
+  <div class="card">
+    <h2>API Health</h2>
+    <div id="health">Đang kiểm tra…</div>
+    <button type="button" id="retry" style="margin-top:0.5rem;padding:0.35rem 0.75rem;cursor:pointer;">Thử lại</button>
+  </div>
+
+  <div class="card">
+    <h2>Dev credentials</h2>
+    <div id="creds">Đang tải dev-credentials.json…</div>
+  </div>
+
+  <script>
+    const API = 'http://127.0.0.1:3000/api/infra/health';
+
+    async function checkHealth() {
+      const el = document.getElementById('health');
+      el.textContent = 'Đang kiểm tra…';
+      try {
+        const r = await fetch(API);
+        const d = await r.json();
+        const lines = [`Trạng thái: ${d.status === 'ok' ? '✓ OK' : '⚠ ' + d.status}`];
+        if (d.checks) {
+          for (const [k, v] of Object.entries(d.checks)) {
+            lines.push(`  ${k}: ${v}`);
+          }
+        }
+        el.innerHTML = lines.map((l, i) =>
+          i === 0
+            ? `<span class="${d.status === 'ok' ? 'ok' : 'err'}">${l}</span>`
+            : l
+        ).join('\n');
+      } catch (e) {
+        el.innerHTML = `<span class="err">API không phản hồi — chạy npm run dev trước.</span>`;
+      }
+    }
+
+    async function loadCreds() {
+      const el = document.getElementById('creds');
+      try {
+        const r = await fetch('/dev-credentials.json');
+        if (!r.ok) throw new Error('not found');
+        const c = await r.json();
+        el.innerHTML = [
+          `TN Session: ${c.tnExamSessionId || '—'}`,
+          `SBD: ${c.sbdFrom || '—'} – ${c.sbdTo || '—'}`,
+          `PIN: ${c.pin || '—'}`,
+          `Proctor: proctor / proctor123`,
+        ].join('<br>');
+      } catch {
+        el.textContent = 'Không tìm thấy dev-credentials.json — chạy npm run dev:prepare';
+      }
+    }
+
+    document.getElementById('retry').onclick = checkHealth;
+    checkHealth();
+    loadCreds();
+    setInterval(checkHealth, 15000);
+  </script>
+</body>
+</html>

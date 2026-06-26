@@ -30,13 +30,18 @@ export class RateLimitService implements OnModuleDestroy {
 
   async check(key: string, maxAttempts: number, windowSec: number): Promise<void> {
     if (this.redis) {
-      const redisKey = `ratelimit:${key}`;
-      const count = await this.redis.incr(redisKey);
-      if (count === 1) await this.redis.expire(redisKey, windowSec);
-      if (count > maxAttempts) {
-        throw new Error('RATE_LIMIT');
+      try {
+        const redisKey = `ratelimit:${key}`;
+        const count = await this.redis.incr(redisKey);
+        if (count === 1) await this.redis.expire(redisKey, windowSec);
+        if (count > maxAttempts) {
+          throw new Error('RATE_LIMIT');
+        }
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.message === 'RATE_LIMIT') throw err;
+        this.redis = null;
       }
-      return;
     }
 
     const now = Date.now();

@@ -4,7 +4,7 @@ import { useExamStore } from '../store';
 
 import { studentApi } from '../api';
 
-import { APP_AUTHOR, SCHOOL_NAME, vi, isProductionUi, CbtBrandLogo } from '@shared/index';
+import { APP_AUTHOR, SCHOOL_NAME, vi, isProductionUi, CbtBrandLogo, ApiStatusBanner } from '@shared/index';
 
 
 
@@ -19,11 +19,10 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   const [loading, setLoading] = useState(false);
-
+  const [roomError, setRoomError] = useState('');
   const [clientIp, setClientIp] = useState('—');
 
   const setAuth = useExamStore((s) => s.setAuth);
-
   const setExamSessionIdStore = useExamStore((s) => s.setExamSessionId);
 
   const production = isProductionUi();
@@ -44,7 +43,9 @@ export default function LoginPage() {
 
       })
 
-      .catch(() => {});
+      .catch((err) => {
+        setRoomError(err instanceof Error ? err.message : 'Không tải được cấu hình phòng thi');
+      });
 
 
 
@@ -139,6 +140,7 @@ export default function LoginPage() {
   return (
 
     <div className="student-login">
+      <ApiStatusBanner />
 
       {!production && (
 
@@ -175,6 +177,7 @@ export default function LoginPage() {
             <h2>{vi.login.title}</h2>
 
             <p className="student-login__hint">{vi.login.accountHint}</p>
+            {roomError && <p className="cbt-error-text" style={{ fontSize: '0.85rem' }}>{roomError}</p>}
 
             <form onSubmit={handleLogin}>
 

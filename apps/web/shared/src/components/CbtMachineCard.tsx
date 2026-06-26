@@ -51,7 +51,7 @@ export function CbtMachineCard({ machineNo, status, label, onClick }: CbtMachine
       }}
     >
       <span>{vi.proctor.machine(machineNo)}</span>
-      <span style={{ fontSize: '0.85rem' }}>{label || `SBD ${String(machineNo).padStart(3, '0')}`}</span>
+      <span style={{ fontSize: '0.85rem' }}>{label || vi.proctor.noSbd}</span>
     </button>
   );
 }

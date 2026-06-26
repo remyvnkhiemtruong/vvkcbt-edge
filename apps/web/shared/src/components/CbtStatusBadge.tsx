@@ -1,3 +1,5 @@
+import { formatAuditEvent } from '../i18n/maps';
+
 type EventType = 'LOGIN' | 'ANSWER' | 'CHANGE' | 'VIOLATION' | string;
 
 const colors: Record<string, { color: string }> = {
@@ -10,6 +12,8 @@ const colors: Record<string, { color: string }> = {
 export function CbtStatusBadge({ type }: { type: EventType }) {
   const style = colors[type] ?? { color: 'var(--cbt-text)' };
   return (
-    <span style={{ fontWeight: 700, color: style.color, fontSize: '0.85rem' }}>{type}</span>
+    <span style={{ fontWeight: 700, color: style.color, fontSize: '0.85rem' }}>
+      {formatAuditEvent(type)}
+    </span>
   );
 }

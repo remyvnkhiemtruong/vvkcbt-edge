@@ -136,6 +136,28 @@ describe('Exam package ZIP structure', () => {
   });
 });
 
+describe('Import ZIP gate (independent subjects)', () => {
+  const blocksImport = (session: { roomExportedAt: Date | null } | null) =>
+    session != null && session.roomExportedAt == null;
+
+  const canImport = (session: { roomExportedAt: Date | null } | null) => !blocksImport(session);
+
+  it('blocks import when current session not room-exported', () => {
+    expect(blocksImport({ roomExportedAt: null })).toBe(true);
+    expect(canImport({ roomExportedAt: null })).toBe(false);
+  });
+
+  it('allows import after room archive export', () => {
+    expect(blocksImport({ roomExportedAt: new Date() })).toBe(false);
+    expect(canImport({ roomExportedAt: new Date() })).toBe(true);
+  });
+
+  it('allows first import on clean machine', () => {
+    expect(blocksImport(null)).toBe(false);
+    expect(canImport(null)).toBe(true);
+  });
+});
+
 describe('Export score columns', () => {
   it('KetQua headers include per-question detail', () => {
     const headers = ['SBD', 'Mã HS', 'Điểm', 'Chi tiết từng câu', 'Nộp lúc'];

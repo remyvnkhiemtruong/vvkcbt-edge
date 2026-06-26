@@ -32,7 +32,7 @@ export class Student {
   @Column({ name: 'class_id', nullable: true })
   classId: string;
 
-  @Column({ name: 'lab_room', nullable: true })
+  @Column({ name: 'lab_room', type: 'varchar', length: 128, nullable: true })
   labRoom: string | null;
 
   @ManyToOne(() => School, (s) => s.students, { nullable: true })

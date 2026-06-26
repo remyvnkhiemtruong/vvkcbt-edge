@@ -43,7 +43,7 @@ interface ExamState {
   setExamSessionId: (id: string) => void;
   setRulesAccepted: (v: boolean) => void;
   setShowSlots: (v: boolean) => void;
-  syncStatus: 'synced' | 'local' | 'offline';
+  syncStatus: 'synced' | 'local' | 'offline' | 'syncing';
   setSyncStatus: (status: ExamState['syncStatus']) => void;
   logout: () => void;
 }

@@ -197,7 +197,7 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   return { valid: errors.length === 0, manifest: state.manifest, errors, warnings };
 }
 
-/** Tách state cho xuất một môn — giữ nguyên packageId để Edge gộp nhiều ZIP */
+/** Tách state cho xuất một môn — mỗi ZIP có packageId riêng (ca độc lập trên Edge). */
 export function sliceStateForSubject(
   state: ExamPackageExportState,
   subjectCode: string,
@@ -215,13 +215,16 @@ export function sliceStateForSubject(
   const credentials = state.credentials?.filter((c) => c.subjectCode === subjectCode);
   const clusters = state.clusters.filter((c) => c.subject === subjectCode);
   const ruleSubjects = (state.session.rules.subjects ?? []).filter((s) => s.code === subjectCode);
+  const exportPackageId = randomUUID();
 
   return {
     manifest: {
       ...state.manifest,
+      packageId: exportPackageId,
       exportScope: 'single_subject',
       subjectCode,
       examName: `${state.manifest.examName} — ${subjectRow.nameVi}`,
+      createdAt: new Date().toISOString(),
     },
     session: {
       ...state.session,
@@ -251,13 +254,13 @@ export async function exportSubjectFromState(
   return packState(sliced);
 }
 
-/** Tên file ZIP một môn — gắn packageId, môn, ngày và giờ mở đề */
+/** Tên file ZIP một môn — dùng packageId của bản slice xuất */
 export function buildSubjectZipFilename(
-  state: ExamPackageExportState,
+  sliced: ExamPackageExportState,
   subjectCode: string,
 ): string {
-  const row = state.subjects.find((s) => s.code === subjectCode);
-  const pkg = state.manifest.packageId.slice(0, 8);
+  const row = sliced.subjects.find((s) => s.code === subjectCode);
+  const pkg = sliced.manifest.packageId.slice(0, 8);
   const date = row?.examDate?.replace(/-/g, '') ?? 'nodate';
   const time = row?.startTime?.replace(':', '') ?? '0000';
   return `exam-${pkg}-${subjectCode}-${date}-${time}.zip`;
@@ -272,11 +275,14 @@ export async function exportAllSubjectsFromState(
     const hasStudents = state.students.some((st) => st.subjects.includes(sub.code));
     if (!hasStudents) continue;
     try {
-      const buffer = await exportSubjectFromState(state, sub.code);
+      const sliced = sliceStateForSubject(state, sub.code);
+      const validation = validateExportState(sliced, { subjectCode: sub.code });
+      if (!validation.valid) continue;
+      const buffer = await packState(sliced);
       results.push({
         subjectCode: sub.code,
         buffer,
-        filename: buildSubjectZipFilename(state, sub.code),
+        filename: buildSubjectZipFilename(sliced, sub.code),
       });
     } catch {
       /* skip subjects that fail validation */
@@ -529,6 +535,59 @@ export async function dryRunZip(buffer: Buffer): Promise<{
         ok: allCred,
         detail: allCred ? `${students.length} thí sinh` : 'Thiếu SBD/PIN',
       });
+
+      if (validation.manifest?.exportScope === 'single_subject') {
+        const subjectCode = validation.manifest.subjectCode;
+        const oneSubjectInManifest = subjectCode != null && subjectCode.length > 0;
+        checklist.push({
+          item: 'single_subject: manifest.subjectCode',
+          ok: oneSubjectInManifest,
+          detail: subjectCode ?? 'Thiếu subjectCode',
+        });
+        const subjectsFile = path.join(workDir, 'subjects.json');
+        let subjectsOk = false;
+        let subjectsDetail = 'Thiếu subjects.json';
+        if (fs.existsSync(subjectsFile)) {
+          try {
+            const subjRows = JSON.parse(fs.readFileSync(subjectsFile, 'utf8')) as ExamPackageSubjectRow[];
+            subjectsOk = subjRows.length === 1 && (!subjectCode || subjRows[0].code === subjectCode);
+            subjectsDetail =
+              subjRows.length === 1
+                ? subjRows[0].code
+                : `${subjRows.length} môn (cần đúng 1)`;
+          } catch {
+            subjectsDetail = 'subjects.json không hợp lệ';
+          }
+        }
+        checklist.push({ item: 'single_subject: 1 môn trong subjects.json', ok: subjectsOk, detail: subjectsDetail });
+        const allOneSubject = students.every((s) => s.subjects?.length === 1);
+        const allMatchCode =
+          !subjectCode || students.every((s) => s.subjects?.[0] === subjectCode);
+        checklist.push({
+          item: 'single_subject: HS chỉ 1 môn',
+          ok: allOneSubject && allMatchCode,
+          detail: allOneSubject
+            ? allMatchCode
+              ? `${students.length} HS`
+              : 'Môn HS không khớp subjectCode'
+            : 'Có HS nhiều hơn 1 môn',
+        });
+        const credPath = path.join(workDir, 'credentials.json');
+        if (fs.existsSync(credPath)) {
+          try {
+            const creds = JSON.parse(fs.readFileSync(credPath, 'utf8')) as ExamPackageCredentialRow[];
+            const credOk =
+              !subjectCode || creds.every((c) => c.subjectCode === subjectCode);
+            checklist.push({
+              item: 'single_subject: credentials cùng môn',
+              ok: credOk,
+              detail: credOk ? `${creds.length} credential` : 'subjectCode lệch',
+            });
+          } catch {
+            checklist.push({ item: 'single_subject: credentials.json', ok: false, detail: 'Không hợp lệ' });
+          }
+        }
+      }
     }
   } finally {
     const parent = path.dirname(workDir);

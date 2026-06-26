@@ -14,6 +14,8 @@ import { StaffAuthGuard } from './guards/staff-auth.guard';
 import { StaffAuthService } from './auth/staff-auth.service';
 import { StaffUserService } from './auth/staff-user.service';
 import { RateLimitService } from './rate-limit/rate-limit.service';
+import { IdempotencyService } from './idempotency/idempotency.service';
+import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
 
 @Global()
 @Module({
@@ -24,7 +26,7 @@ import { RateLimitService } from './rate-limit/rate-limit.service';
       signOptions: { expiresIn: '8h' },
     }),
   ],
-  providers: [AuditService, ScoringService, StudentAuthGuard, StaffAuthGuard, StaffAuthService, StaffUserService, RateLimitService],
-  exports: [AuditService, ScoringService, StudentAuthGuard, StaffAuthGuard, StaffAuthService, StaffUserService, RateLimitService, JwtModule],
+  providers: [AuditService, ScoringService, StudentAuthGuard, StaffAuthGuard, StaffAuthService, StaffUserService, RateLimitService, IdempotencyService, IdempotencyInterceptor],
+  exports: [AuditService, ScoringService, StudentAuthGuard, StaffAuthGuard, StaffAuthService, StaffUserService, RateLimitService, IdempotencyService, IdempotencyInterceptor, JwtModule],
 })
 export class SharedModule {}

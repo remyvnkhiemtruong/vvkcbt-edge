@@ -16,6 +16,9 @@ import { SlotSchedulerService } from '../routing/slot-scheduler.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { ProctorScoreService } from './proctor-score.service';
 import { RoomScoreSheetService } from './room-score-sheet.service';
+import { SubjectRoomCompletionService } from './subject-room-completion.service';
+import { AppealService } from './appeal.service';
+import { RoomArchiveService } from './room-archive.service';
 
 @Controller('proctor')
 @UseGuards(StaffAuthGuard)
@@ -36,6 +39,9 @@ export class ProctorController {
     private readonly auditService: AuditService,
     private readonly scoreService: ProctorScoreService,
     private readonly roomScoreSheetService: RoomScoreSheetService,
+    private readonly subjectRoomCompletion: SubjectRoomCompletionService,
+    private readonly appealService: AppealService,
+    private readonly roomArchiveService: RoomArchiveService,
   ) {}
   @Get('grid/:examSessionId')
   async getGrid(
@@ -80,7 +86,7 @@ export class ProctorController {
     if (!subjectCode?.trim()) throw new BadRequestException('Thiếu subjectCode');
     const roomName = room?.trim() || process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
     const fmt = format === 'xlsx' ? 'xlsx' : 'pdf';
-    const buf = await this.roomScoreSheetService.export(examSessionId, {
+    const result = await this.roomScoreSheetService.export(examSessionId, {
       subjectCode: subjectCode.trim(),
       room: roomName,
       format: fmt,
@@ -89,14 +95,44 @@ export class ProctorController {
       signature1,
       signature2,
     });
-    if (fmt === 'xlsx') {
+    if (result.pdfFallback) {
+      res.setHeader('X-Pdf-Fallback', 'excel');
+    }
+    if (result.format === 'xlsx') {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="bien-ban-${subjectCode}.xlsx"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${this.roomScoreSheetService.exportFilename(subjectCode.trim(), roomName, 'xlsx')}"`,
+      );
     } else {
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="bien-ban-${subjectCode}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${this.roomScoreSheetService.exportFilename(subjectCode.trim(), roomName, 'pdf')}"`,
+      );
     }
-    res.send(buf);
+    res.send(result.buffer);
+  }
+
+  @Get('sessions/:examSessionId/room-score-sheet/preview')
+  async roomScoreSheetPreview(
+    @Param('examSessionId') examSessionId: string,
+    @Query('subjectCode') subjectCode?: string,
+    @Query('room') room?: string,
+  ) {
+    if (!subjectCode?.trim()) throw new BadRequestException('Thiếu subjectCode');
+    const roomName = room?.trim() || process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
+    return this.subjectRoomCompletion.preview(examSessionId, subjectCode.trim(), roomName);
+  }
+
+  @Post('sessions/:examSessionId/end-subject-room')
+  async endSubjectRoom(
+    @Param('examSessionId') examSessionId: string,
+    @Body() body: { subjectCode: string; room?: string },
+  ) {
+    if (!body.subjectCode?.trim()) throw new BadRequestException('Thiếu subjectCode');
+    const roomName = body.room?.trim() || process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
+    return this.subjectRoomCompletion.forceComplete(examSessionId, body.subjectCode.trim(), roomName);
   }
 
   @Post('action')
@@ -181,6 +217,31 @@ export class ProctorController {
     };
   }
 
+  @Get('sessions/:examSessionId/room-archive')
+  async exportRoomArchive(
+    @Param('examSessionId') examSessionId: string,
+    @Res() res: Response,
+    @Query('room') room?: string,
+    @Query('proctor1Name') proctor1Name?: string,
+    @Query('proctor2Name') proctor2Name?: string,
+    @Query('signature1') signature1?: string,
+    @Query('signature2') signature2?: string,
+  ) {
+    const slots = await this.slotRepo.find({ where: { examSessionId }, take: 1 });
+    const subjectCode = slots[0]?.subjectCode;
+    const zip = await this.roomArchiveService.exportRoomArchive(examSessionId, {
+      room,
+      proctor1Name,
+      proctor2Name,
+      signature1,
+      signature2,
+    });
+    const filename = this.roomArchiveService.exportFilename(examSessionId, subjectCode);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(zip);
+  }
+
   @Get('sessions/:examSessionId/report')
   async exportReport(@Param('examSessionId') examSessionId: string) {
     const excel = await this.examMaster.exportMaster(examSessionId);
@@ -258,5 +319,50 @@ export class ProctorController {
     }
     await this.examSessionRepo.update(examSessionId, { rules } as never);
     return { updated: true };
+  }
+
+  @Get('sessions/:examSessionId/appeals')
+  listAppeals(@Param('examSessionId') examSessionId: string) {
+    return this.appealService.list(examSessionId);
+  }
+
+  @Post('sessions/:examSessionId/appeals')
+  createAppeal(
+    @Param('examSessionId') examSessionId: string,
+    @Body() body: { sbd: string; subjectCode: string; questionId?: string; reason: string },
+  ) {
+    if (!body.sbd?.trim() || !body.subjectCode?.trim() || !body.reason?.trim()) {
+      throw new BadRequestException('Thiếu SBD, môn hoặc lý do');
+    }
+    return this.appealService.create({ examSessionId, ...body });
+  }
+
+  @Patch('appeals/:id/review')
+  reviewAppeal(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      status: 'reviewing' | 'accepted' | 'rejected';
+      reviewedBy?: string;
+      reviewNote?: string;
+      scoreBefore?: number;
+      scoreAfter?: number;
+    },
+  ) {
+    return this.appealService.review(id, {
+      ...body,
+      reviewedBy: body.reviewedBy ?? 'proctor',
+    });
+  }
+
+  @Get('sessions/:examSessionId/report/so-export')
+  async exportSoReport(@Param('examSessionId') examSessionId: string) {
+    const excel = await this.examMaster.exportMaster(examSessionId);
+    return {
+      excelBase64: excel.toString('base64'),
+      filename: `bao-cao-so-${examSessionId.slice(0, 8)}.xlsx`,
+      generatedAt: new Date().toISOString(),
+      note: 'Mẫu tổng hợp Sở — đối chiếu với CV mẫu Sở GDĐT Cà Mau',
+    };
   }
 }

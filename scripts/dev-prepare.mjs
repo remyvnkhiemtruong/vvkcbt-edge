@@ -100,7 +100,7 @@ if (!tryRun('docker compose -f docker/docker-compose.yml up -d postgres redis'))
 
 // 3. Wait for ports
 console.log('Waiting for database and Redis...');
-tryRun('npx wait-on tcp:localhost:5432 tcp:localhost:6379 -t 120000');
+tryRun('npx wait-on tcp:127.0.0.1:5432 tcp:127.0.0.1:6379 -t 120000');
 
 // 4. Build shared types (API depends on dist)
 tryRun('npm run build -w @vnu/shared-types');
@@ -121,11 +121,13 @@ if (fs.existsSync(credPath)) {
   console.log('\n========================================');
   console.log('  VNU Edge Exam — Development ready');
   console.log('========================================');
-  console.log(`  API:     http://localhost:3000/api/infra/health`);
-  console.log(`  Student: http://localhost:5173/student/`);
-  console.log(`  Proctor: http://localhost:5174/proctor/`);
+  console.log(`  API:     http://127.0.0.1:3000/api/infra/health`);
+  console.log(`  Student: http://127.0.0.1:5173/student/`);
+  console.log(`  Proctor: http://127.0.0.1:5174/proctor/`);
+  console.log(`  Launcher: http://127.0.0.1:3099/dev-launcher.html  (npm run dev:launcher)`);
   console.log(`  Composer: repo vnu-composer (standalone)`);
   console.log(`  Waiting: file://${path.join(root, 'scripts/waiting-room-diagnostic.html')}`);
+  console.log('  Student/Proctor sẽ chờ API health trước khi mở Vite...');
   console.log('----------------------------------------');
   console.log(`  TN THPT Session: ${cred.tnExamSessionId}`);
   console.log(`  GDPT Session:    ${cred.gdptExamSessionId}`);

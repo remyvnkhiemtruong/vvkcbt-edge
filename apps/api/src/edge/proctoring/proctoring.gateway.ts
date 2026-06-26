@@ -348,6 +348,29 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
     this.server.to(`session:${examSessionId}`).emit('score_update', payload);
   }
 
+  emitSubjectRoomComplete(payload: {
+    examSessionId: string;
+    subjectCode: string;
+    subjectNameVi: string;
+    room: string;
+    stats: { total: number; completed: number; isComplete: boolean };
+    rows: Array<{
+      stt: number;
+      sbd: string;
+      fullName: string;
+      className: string;
+      part1: string | number;
+      part2: string | number;
+      part3: string | number;
+      total: string | number;
+      note?: string;
+      pendingManual?: boolean;
+    }>;
+    forced?: boolean;
+  }) {
+    this.server.to(`session:${payload.examSessionId}`).emit('subject_room_complete', payload);
+  }
+
   async broadcastGrid(examSessionId: string, options?: ProctorGridOptions) {
     const grid = await this.getGrid(examSessionId, options);
     this.server.to(`session:${examSessionId}`).emit('grid_update', grid);

@@ -18,6 +18,7 @@ interface Props {
   answer: unknown;
   onChange: (answer: unknown) => void;
   questionId: string;
+  readOnly?: boolean;
 }
 
 function McqOptions({
@@ -25,11 +26,13 @@ function McqOptions({
   answer,
   onChange,
   questionId,
+  readOnly,
 }: {
   options: string[];
   answer: unknown;
   onChange: (a: unknown) => void;
   questionId: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="options">
@@ -41,6 +44,7 @@ function McqOptions({
               type="radio"
               name={questionId}
               checked={answer === key}
+              disabled={readOnly}
               onChange={() => onChange(key)}
             />
             {opt}
@@ -59,6 +63,7 @@ export function ClusterSubtypeRenderer({
   answer,
   onChange,
   questionId,
+  readOnly = false,
 }: Props) {
   const [order, setOrder] = useState<string[]>(() =>
     options.length ? [...options] : [],
@@ -85,8 +90,8 @@ export function ClusterSubtypeRenderer({
           {order.map((opt, i) => (
             <li key={opt} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ flex: 1 }}>{opt}</span>
-              <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => move(i, i - 1)}>↑</button>
-              <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => move(i, i + 1)}>↓</button>
+              <button type="button" className="cbt-btn cbt-btn-outline" disabled={readOnly} onClick={() => move(i, i - 1)}>↑</button>
+              <button type="button" className="cbt-btn cbt-btn-outline" disabled={readOnly} onClick={() => move(i, i + 1)}>↓</button>
             </li>
           ))}
         </ol>
@@ -95,6 +100,7 @@ export function ClusterSubtypeRenderer({
           answer={answer}
           onChange={onChange}
           questionId={questionId}
+          readOnly={readOnly}
         />
       </div>
     );
@@ -109,6 +115,7 @@ export function ClusterSubtypeRenderer({
             /^\{\{\d+\}\}$|___+/.test(part) ? (
               <select
                 key={i}
+                disabled={readOnly}
                 value={(answer as Record<string, string>)?.[`g${i}`] ?? ''}
                 onChange={(e) =>
                   onChange({ ...(answer as Record<string, string>), [`g${i}`]: e.target.value })

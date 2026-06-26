@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  QuestionRenderer,
   TimerBar,
   AudioPlayer,
   GracePeriodOverlay,
   CbtBrandLogo,
+  ExamViewShell,
   vi,
   isRunningInSEB,
+  type ExamQuestion,
+  type ExamUiMode,
+  ApiStatusBanner,
 } from '@shared/index';
 import { createSocket } from '@shared/socket';
 import { useExamStore } from '../store';
@@ -14,8 +17,20 @@ import { studentApi } from '../api';
 import { useFocusGuard } from '../hooks/useFocusGuard';
 import { useExamLockdown } from '../hooks/useExamLockdown';
 import { useAutosave, useSubmitRetry } from '../hooks/useAutosave';
+import { countAnswered, SubmitSummaryPanel } from '../components/SubmitSummary';
 
 const API = import.meta.env.VITE_API_URL || '';
+
+function extractSharedPassage(questions: ExamQuestion[]): string | undefined {
+  for (const q of questions) {
+    const p =
+      q.passage?.body ||
+      q.content?.passage ||
+      (q.content?.body as string | undefined);
+    if (p?.trim()) return p;
+  }
+  return undefined;
+}
 
 export default function ExamPage() {
   const { exam, answers, locked, setExam, setAnswer, setLocked, setSubmitted, sessionId, sbd, examAccount } =
@@ -29,7 +44,7 @@ export default function ExamPage() {
   const [retryAttempt, setRetryAttempt] = useState(1);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
-  const [uiOverride, setUiOverride] = useState<'split_view' | 'vertical_focus' | null>(null);
+  const [uiOverride, setUiOverride] = useState<ExamUiMode | null>(null);
   const { blurred, violations } = useFocusGuard(true);
 
   const autosaveInterval = (exam?.rules as { proctoring?: { autosave_interval_sec?: number } })
@@ -116,10 +131,14 @@ export default function ExamPage() {
     if (remainingSec === 0 && exam) handleSubmit();
   }, [remainingSec]);
 
+  const questions = useMemo(
+    () => ((exam?.questions as ExamQuestion[]) || []),
+    [exam?.questions],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!exam) return;
-      const questions = (exam.questions as Array<Record<string, unknown>>) || [];
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'j') {
         setCurrentIdx((i) => Math.min(questions.length - 1, i + 1));
         e.preventDefault();
@@ -135,9 +154,8 @@ export default function ExamPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exam]);
+  }, [exam, questions.length]);
 
-  const questions = (exam?.questions as Array<Record<string, unknown>>) || [];
   const current = questions[currentIdx];
   const audioAssetId = (current?.content as { audio_id?: string })?.audio_id;
 
@@ -206,17 +224,14 @@ export default function ExamPage() {
 
   if (!exam) return <div className="loading">{vi.exam.loading}</div>;
 
-  const defaultUi = (exam.rules as { uiMode?: string })?.uiMode ?? 'vertical_focus';
+  const defaultUi = ((exam.rules as { uiMode?: ExamUiMode })?.uiMode ?? 'vertical_focus') as ExamUiMode;
   const uiMode = uiOverride ?? defaultUi;
-  const subjectLabel = (exam.title as string) || 'BÀI THI';
-  const clusterPassage =
-    (current?.passage as { body?: string; title?: string })?.body ||
-    (current?.content as { passage?: string })?.passage;
+  const subjectLabel = (exam.title as string) || vi.exam.defaultTitle;
+  const sharedPassage = extractSharedPassage(questions);
   const audioRules = (exam.rules as { audio?: { max_plays?: number } })?.audio;
   const maxViolations =
     (exam?.rules as { proctoring?: { max_focus_violations?: number } })?.proctoring
       ?.max_focus_violations ?? 3;
-  const toggleOn = uiMode === 'split_view';
 
   const watermarkText =
     proctoring?.watermark !== false && (sbd || examAccount)
@@ -225,13 +240,16 @@ export default function ExamPage() {
 
   const syncLabel =
     syncStatus === 'synced'
-      ? 'Đã đồng bộ'
-      : syncStatus === 'local'
-        ? 'Đã lưu máy'
-        : 'Mất mạng';
+      ? vi.exam.syncSynced
+      : syncStatus === 'syncing'
+        ? 'Đang đồng bộ…'
+        : syncStatus === 'local'
+          ? vi.exam.syncLocal
+          : vi.exam.syncOffline;
 
   return (
     <div className={`exam-page mode-${uiMode}`} style={{ userSelect: 'none' }}>
+      <ApiStatusBanner pollMs={8000} />
       {watermarkText && (
         <div
           className="exam-watermark"
@@ -257,10 +275,17 @@ export default function ExamPage() {
       )}
       <GracePeriodOverlay visible={gracePeriod} retryAttempt={retryAttempt} />
 
+      {confirmSubmit && !submitting && (
+        <SubmitSummaryPanel
+          {...countAnswered(questions, answers)}
+          remainingSec={remainingSec}
+        />
+      )}
+
       {blurred && (
         <div className="focus-overlay">
           <p>{vi.exam.focusWarning}</p>
-          <p>Vi phạm: {violations}/{maxViolations}</p>
+          <p>{vi.exam.violationCount(violations, maxViolations)}</p>
         </div>
       )}
       {locked && <div className="lock-overlay">{vi.exam.locked}</div>}
@@ -291,11 +316,11 @@ export default function ExamPage() {
             onClick={() =>
               socketRef.current?.emit('help_request', {
                 sessionId,
-                reason: 'Yêu cầu giám thị / đổi máy',
+                reason: vi.exam.callProctorReason,
               })
             }
           >
-            Gọi giám thị
+            {vi.exam.callProctor}
           </button>
           <span
             className="exam-meta"
@@ -307,6 +332,7 @@ export default function ExamPage() {
           <button
             type="button"
             className="toggle-view"
+            aria-label={vi.exam.viewModeLabel}
             onClick={() =>
               setUiOverride((m) =>
                 (m ?? defaultUi) === 'split_view' ? 'vertical_focus' : 'split_view',
@@ -327,72 +353,30 @@ export default function ExamPage() {
         questionTo={5}
       />
 
-      <div className={`exam-body ${uiMode === 'split_view' ? 'split-view' : 'vertical-focus'}`}>
-        {uiMode === 'split_view' && clusterPassage && (
-          <aside className="passage-panel">
-            <h3 className="passage-title">
-              {vi.exam.passageTitle} (CÂU 1 - {questions.length})
-            </h3>
-            <p>{clusterPassage}</p>
-          </aside>
-        )}
-
-        <main className="question-panel">
-          {uiMode === 'vertical_focus' ? (
-            questions.map((q, i) => (
-              <div key={q.id as string} id={`q-${i}`} tabIndex={0} className="question">
-                <span className="q-num">Câu {i + 1}</span>
-                <QuestionRenderer
-                  question={q as never}
-                  answer={answers[q.id as string]}
-                  onChange={(a) => setAnswer(q.id as string, a)}
-                  onClick={() => studentApi.auditClick(`q-${i}`).catch(() => {})}
-                />
-              </div>
-            ))
-          ) : (
-            current && (
-              <>
-                <span className="q-num">Câu {currentIdx + 1}</span>
-                <QuestionRenderer
-                  question={current as never}
-                  answer={answers[current.id as string]}
-                  onChange={(a) => setAnswer(current.id as string, a)}
-                />
-              </>
-            )
-          )}
-        </main>
-
-        {uiMode === 'split_view' && (
-          <nav className="q-nav">
-            {questions.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                className={i === currentIdx ? 'active' : ''}
-                onClick={() => setCurrentIdx(i)}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </nav>
-        )}
-      </div>
+      <ExamViewShell
+        questions={questions}
+        answers={answers}
+        uiMode={uiMode}
+        sharedPassage={sharedPassage}
+        currentIdx={currentIdx}
+        onCurrentIdxChange={setCurrentIdx}
+        onChange={(id, a) => setAnswer(id, a)}
+        onQuestionClick={(i) => studentApi.auditClick(`q-${i}`).catch(() => {})}
+      />
 
       <footer className="exam-footer">
-        <span className="kbd-hint">Phím: ↑↓←→ hoặc 1-9 để chuyển câu</span>
+        <span className="kbd-hint">{vi.exam.kbdHint}</span>
         <button
           type="button"
           className="cbt-btn cbt-btn-primary"
           onClick={handleSubmit}
           disabled={locked || submitting}
         >
-          {submitting ? vi.exam.submitting : confirmSubmit ? 'Xác nhận nộp' : vi.exam.submit}
+          {submitting ? vi.exam.submitting : confirmSubmit ? vi.exam.confirmSubmit : vi.exam.submit}
         </button>
         {confirmSubmit && !submitting && (
           <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => setConfirmSubmit(false)}>
-            Hủy
+            {vi.exam.cancel}
           </button>
         )}
       </footer>

@@ -51,6 +51,8 @@ export enum AuditEventType {
   SCORE_OVERRIDE = 'score_override',
   FULLSCREEN_EXIT = 'fullscreen_exit',
   HELP_REQUEST = 'help_request',
+  APPEAL_CREATED = 'appeal_created',
+  APPEAL_REVIEWED = 'appeal_reviewed',
 }
 
 export interface TrueFalseBranchScoring {

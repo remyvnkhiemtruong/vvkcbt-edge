@@ -92,9 +92,25 @@ export class InfraController {
       checks.migration = 'error';
     }
 
-    const allOk = Object.values(checks).every(
-      (v) => v === 'ok' || String(v).startsWith('ok') || String(v).startsWith('skipped'),
-    );
+    try {
+      const puppeteer = await import('puppeteer');
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ['--no-sandbox'],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      });
+      await browser.close();
+      checks.puppeteer = 'ok';
+      checks.pdfEngine = 'puppeteer';
+    } catch {
+      checks.puppeteer = 'error';
+      checks.pdfEngine = 'excel-fallback';
+    }
+
+    const allOk = Object.entries(checks).every(([k, v]) => {
+      if (k === 'puppeteer') return true;
+      return v === 'ok' || String(v).startsWith('ok') || String(v).startsWith('skipped');
+    });
     return {
       status: allOk ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),

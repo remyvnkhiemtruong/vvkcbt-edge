@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { vi } from '@shared/index';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -90,15 +91,15 @@ export function ScoreEditor({
       {hasParts ? (
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <label>
-            P.I
+            {vi.proctor.partLabel(1)}
             <input className="cbt-input" type="number" step="0.01" value={part1} onChange={(e) => setPart1(e.target.value)} style={{ width: 72 }} />
           </label>
           <label>
-            P.II
+            {vi.proctor.partLabel(2)}
             <input className="cbt-input" type="number" step="0.01" value={part2} onChange={(e) => setPart2(e.target.value)} style={{ width: 72 }} />
           </label>
           <label>
-            P.III
+            {vi.proctor.partLabel(3)}
             <input className="cbt-input" type="number" step="0.01" value={part3} onChange={(e) => setPart3(e.target.value)} style={{ width: 72 }} />
           </label>
         </div>
@@ -161,8 +162,8 @@ export function StudentDetailPanel({
           </strong>
           {item.partScores && (
             <span style={{ fontSize: '0.85rem', marginLeft: 8 }}>
-              P.I {item.partScores.part1 ?? '—'} · P.II {item.partScores.part2 ?? '—'} · P.III{' '}
-              {item.partScores.part3 ?? '—'}
+              {vi.proctor.partLabel(1)} {item.partScores.part1 ?? '—'} · {vi.proctor.partLabel(2)}{' '}
+              {item.partScores.part2 ?? '—'} · {vi.proctor.partLabel(3)} {item.partScores.part3 ?? '—'}
             </span>
           )}
           {item.pendingManual && <span style={{ color: '#fbbf24' }}> · Chờ chấm Văn</span>}

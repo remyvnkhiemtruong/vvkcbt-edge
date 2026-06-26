@@ -5,8 +5,24 @@ import { useExamStore } from '../store';
 
 const DEBOUNCE_MS = 300;
 const FALLBACK_INTERVAL_SEC = 30;
+const QUEUE_KEY_PREFIX = 'vnu_autosave_queue_';
 
-export type SyncStatus = 'synced' | 'local' | 'offline';
+export type SyncStatus = 'synced' | 'local' | 'offline' | 'syncing';
+
+interface QueuedBatch {
+  idempotencyKey: string;
+  answers: Record<string, unknown>;
+  queuedAt: string;
+}
+
+async function loadQueue(sessionId: string): Promise<QueuedBatch[]> {
+  const raw = await get(`${QUEUE_KEY_PREFIX}${sessionId}`);
+  return Array.isArray(raw) ? (raw as QueuedBatch[]) : [];
+}
+
+async function saveQueue(sessionId: string, queue: QueuedBatch[]) {
+  await set(`${QUEUE_KEY_PREFIX}${sessionId}`, queue);
+}
 
 export function useAutosave(_intervalSec = 3): SyncStatus {
   const answers = useExamStore((s) => s.answers);
@@ -17,13 +33,49 @@ export function useAutosave(_intervalSec = 3): SyncStatus {
   const lastSaved = useRef<string>('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastOnlineError = useRef(false);
+  const flushing = useRef(false);
+
+  const flushQueue = async (sid: string) => {
+    if (flushing.current || !navigator.onLine) return;
+    flushing.current = true;
+    try {
+      const queue = await loadQueue(sid);
+      if (!queue.length) return;
+      setSyncStatus('syncing');
+      const remaining: QueuedBatch[] = [];
+      for (const batch of queue) {
+        try {
+          await studentApi.autosave(batch.answers, batch.idempotencyKey);
+        } catch {
+          remaining.push(batch);
+          break;
+        }
+      }
+      await saveQueue(sid, remaining);
+      if (!remaining.length) {
+        lastOnlineError.current = false;
+        setSyncStatus('synced');
+      } else {
+        lastOnlineError.current = true;
+        setSyncStatus('local');
+      }
+    } finally {
+      flushing.current = false;
+    }
+  };
 
   const persist = async (payload: Record<string, unknown>) => {
     const serialized = JSON.stringify(payload);
     if (serialized === lastSaved.current) return;
     lastSaved.current = serialized;
 
-    await set(`vnu_answers_${sessionId}`, { answers: payload, savedAt: new Date().toISOString() });
+    const savedAt = new Date().toISOString();
+    await set(`vnu_answers_${sessionId}`, { answers: payload, savedAt });
+
+    const idempotencyKey = `${sessionId}-${savedAt}`;
+    const queue = await loadQueue(sessionId!);
+    queue.push({ idempotencyKey, answers: payload, queuedAt: savedAt });
+    await saveQueue(sessionId!, queue);
 
     if (!navigator.onLine) {
       lastOnlineError.current = true;
@@ -31,14 +83,7 @@ export function useAutosave(_intervalSec = 3): SyncStatus {
       return;
     }
 
-    try {
-      await studentApi.autosave(payload);
-      lastOnlineError.current = false;
-      setSyncStatus('synced');
-    } catch {
-      lastOnlineError.current = true;
-      setSyncStatus('local');
-    }
+    await flushQueue(sessionId!);
   };
 
   useEffect(() => {
@@ -59,16 +104,16 @@ export function useAutosave(_intervalSec = 3): SyncStatus {
 
     const id = setInterval(() => {
       if (lastOnlineError.current || !navigator.onLine) {
-        persist(answers).catch(() => {});
+        flushQueue(sessionId).catch(() => {});
       }
     }, FALLBACK_INTERVAL_SEC * 1000);
 
     return () => clearInterval(id);
-  }, [answers, sessionId, submitted]);
+  }, [sessionId, submitted]);
 
   useEffect(() => {
     const onOnline = () => {
-      if (lastOnlineError.current) persist(answers).catch(() => {});
+      if (sessionId) flushQueue(sessionId).catch(() => {});
     };
     const onOffline = () => setSyncStatus('offline');
     window.addEventListener('online', onOnline);
@@ -77,7 +122,7 @@ export function useAutosave(_intervalSec = 3): SyncStatus {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [answers, sessionId, submitted]);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -88,6 +133,7 @@ export function useAutosave(_intervalSec = 3): SyncStatus {
         useExamStore.getState().setAnswers(restored as Record<string, unknown>);
       }
     });
+    flushQueue(sessionId).catch(() => {});
   }, [sessionId]);
 
   return syncStatus;

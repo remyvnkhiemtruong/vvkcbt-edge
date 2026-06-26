@@ -46,7 +46,7 @@ export class StaffAuthGuard implements CanActivate {
     try {
       payload = this.jwtService.verify<StaffJwtPayload>(token);
     } catch {
-      throw new UnauthorizedException('Invalid token');
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
     }
 
     if (!payload.role || !allowedRoles.includes(payload.role)) {

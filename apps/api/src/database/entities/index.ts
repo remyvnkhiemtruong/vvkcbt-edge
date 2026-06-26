@@ -16,3 +16,4 @@ export * from './exam-structure-template.entity';
 export * from './question-cluster.entity';
 export * from './tnpt-combo-catalog.entity';
 export * from './student-subject-slot.entity';
+export * from './appeal-request.entity';

@@ -25,5 +25,6 @@ import { PdfService } from './pdf/pdf.service';
   ],
   controllers: [PostExamController],
   providers: [ManualReviewService, AnonymizationService, CalibrationService, PdfService],
+  exports: [PdfService],
 })
 export class PostExamModule {}

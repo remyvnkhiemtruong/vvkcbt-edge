@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
   BadRequestException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { StudentAuthService } from './student-auth.service';
@@ -18,6 +19,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StudentSessionStatus, AuditEventType } from '@vnu/shared-types';
 import { AuditService } from '../../shared/audit/audit.service';
+import { IdempotencyInterceptor } from '../../shared/idempotency/idempotency.interceptor';
 
 interface AuthRequest extends Request {
   studentSession: StudentSession;
@@ -69,6 +71,7 @@ export class StudentAuthController {
 
   @Patch('answers')
   @UseGuards(StudentAuthGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   async autosave(@Req() req: AuthRequest, @Body() dto: AutosaveDto) {
     return this.authService.autosave(req.studentSession, dto.answers, this.getClientIp(req));
   }

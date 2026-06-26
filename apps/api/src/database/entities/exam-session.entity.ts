@@ -37,6 +37,9 @@ export class ExamSession {
   @Column({ name: 'package_id', type: 'uuid', nullable: true, unique: true })
   packageId: string | null;
 
+  @Column({ name: 'room_exported_at', type: 'timestamptz', nullable: true })
+  roomExportedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

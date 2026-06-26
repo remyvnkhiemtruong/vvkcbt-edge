@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { CbtCard, SCHOOL_NAME, vi, isProductionUi } from '@shared/index';
+import { CbtCard, SCHOOL_NAME, vi, isProductionUi, getSubjectNameVi, formatSlotStatus } from '@shared/index';
 
 import { studentApi } from '../api';
 
@@ -40,67 +40,9 @@ interface Props {
 
 
 
-const SUBJECT_VI: Record<string, string> = {
-
-  MATH: 'Toán',
-
-  LITERATURE: 'Ngữ văn',
-
-  ENGLISH: 'Tiếng Anh',
-
-  PHYSICS: 'Vật lý',
-
-  CHEMISTRY: 'Hóa học',
-
-  BIOLOGY: 'Sinh học',
-
-  HISTORY: 'Lịch sử',
-
-  GEOGRAPHY: 'Địa lý',
-
-  CIVIC_EDU: 'GDKT&PL',
-
-  TECHNOLOGY: 'Công nghệ',
-
-  INFORMATICS: 'Tin học',
-
-};
-
-
-
 function slotStatusLabel(status: string): string {
-
-  switch (status) {
-
-    case 'open':
-
-      return 'Đã mở';
-
-    case 'scheduled':
-
-      return 'Chưa mở';
-
-    case 'completed':
-
-      return 'Đã nộp';
-
-    case 'locked':
-
-      return 'Hết giờ';
-
-    case 'in_exam':
-
-      return 'Đang thi';
-
-    default:
-
-      return status;
-
-  }
-
+  return formatSlotStatus(status);
 }
-
-
 
 function Countdown({ target }: { target: string }) {
 
@@ -304,7 +246,7 @@ export default function SlotsPage({ onStartExam }: Props) {
 
               <h3 style={{ color: 'var(--cbt-primary)' }}>
 
-                {SUBJECT_VI[slot.subjectCode] || slot.subjectCode}
+                {getSubjectNameVi(slot.subjectCode)}
 
               </h3>
 

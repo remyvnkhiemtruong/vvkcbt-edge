@@ -56,6 +56,10 @@ jobs:
           DATABASE_URL: postgresql://vnu:vnu_secret@localhost:5432/vnu_exam
           JWT_SECRET: ci-jwt-secret-min-32-characters-long
 
+      - name: Kit sync check
+        run: npm run kit-sync-check
+        continue-on-error: true
+
   composer-kit-smoke:
     runs-on: ubuntu-latest
     steps:

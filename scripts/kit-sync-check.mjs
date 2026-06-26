@@ -22,9 +22,10 @@ const composerMarkerChecks = [
       "'ngày sinh': 'dateOfBirth'",
       "'giới tính': 'gender'",
       'DanhSachThiSinh',
-      "subjects = ['LITERATURE', 'MATH']",
+      'export function detectImportSubject',
+      'Mỗi file Excel chỉ dùng cho một môn',
     ],
-    label: 'excelImport.ts HEADER_ALIASES',
+    label: 'excelImport.ts HEADER_ALIASES + detectImportSubject',
   },
   {
     rel: 'apps/web/src/composer-labels.ts',

@@ -60,7 +60,7 @@ function DiagnosticGate({ onPass }: { onPass: () => void }) {
         ok: true,
         text: inSeb
           ? 'Safe Exam Browser — OK (chế độ trình duyệt cũng được hỗ trợ)'
-          : 'Chế độ trình duyệt — dùng Chrome/Edge toàn màn hình (F11 hoặc kiosk)',
+          : 'Chế độ trình duyệt — dùng Chrome hoặc Edge toàn màn hình (F11 hoặc kiosk)',
       });
     }
 

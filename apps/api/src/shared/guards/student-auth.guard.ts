@@ -24,7 +24,7 @@ export class StudentAuthGuard implements CanActivate {
     try {
       payload = this.jwtService.verify(token);
     } catch {
-      throw new UnauthorizedException('Invalid token');
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
     }
 
     const clientIp = request.ip || request.headers['x-forwarded-for'] || request.socket?.remoteAddress;

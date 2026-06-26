@@ -62,13 +62,20 @@ export class StaffAuthService {
       throw new HttpException('Quá nhiều lần đăng nhập', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    if (await this.staffUserService.validateLogin(username, password, role)) {
+    let dbLogin = false;
+    try {
+      dbLogin = await this.staffUserService.validateLogin(username, password, role);
+    } catch {
+      dbLogin = false;
+    }
+
+    if (dbLogin) {
       const token = this.jwtService.sign({ sub: username, role });
       return { token, role };
     }
 
     if (username !== expectedUser) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Sai tên đăng nhập hoặc mật khẩu');
     }
 
     let valid = false;
@@ -78,7 +85,7 @@ export class StaffAuthService {
       valid = password === expectedPassword;
     }
 
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) throw new UnauthorizedException('Sai tên đăng nhập hoặc mật khẩu');
 
     const token = this.jwtService.sign({ sub: username, role });
     return { token, role };

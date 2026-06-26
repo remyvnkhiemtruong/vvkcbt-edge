@@ -1,9 +1,30 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { resolveApiProxyTarget } from '../shared/vite-proxy';
+
+const apiTarget = resolveApiProxyTarget();
+
+function proctorDevRootRedirect(): Plugin {
+  return {
+    name: 'proctor-dev-root-redirect',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split('?')[0] ?? '';
+        if (url === '/' || url === '') {
+          res.statusCode = 302;
+          res.setHeader('Location', '/proctor/');
+          res.end();
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), proctorDevRootRedirect()],
   base: '/proctor/',
   resolve: {
     alias: {
@@ -13,10 +34,11 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    open: '/proctor/',
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/socket.io': { target: 'http://localhost:3000', ws: true },
-      '/proctoring': { target: 'http://localhost:3000', ws: true },
+      '/api': apiTarget,
+      '/socket.io': { target: apiTarget, ws: true },
+      '/proctoring': { target: apiTarget, ws: true },
     },
   },
 });

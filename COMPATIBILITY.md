@@ -27,10 +27,10 @@ Sheet `DanhSachThiSinh` with column aliases (see `vnu-composer/apps/web/src/exce
 |-----------|------------|
 | Họ tên, SBD, Lớp | `fullName`, `sbd`, `className` |
 | Ngày sinh, Giới tính | `dateOfBirth`, `gender` |
-| Cột môn (đánh dấu X) | `subjects[]` |
-| Môn trống | Mặc định **Văn + Toán** |
+| Cột môn (đánh dấu X) | `subjects[]` — **đúng một cột X / file** |
+| Môn trống (legacy `parseStudentsExcel`) | Mặc định Văn + Toán — **không dùng** trong luồng import môn |
 
-`kit-sync-check.mjs` verifies `HEADER_ALIASES` markers stay in sync.
+`detectImportSubject()` bắt buộc đúng 1 cột môn có X; `resetComposerForSubject()` giữ roster SBD, xóa papers/credentials môn cũ khi chuyển môn. `kit-sync-check.mjs` kiểm tra marker `detectImportSubject`.
 
 ### Ngày sinh / giới tính — chỉ trên phiếu in
 
@@ -41,13 +41,14 @@ Sheet `DanhSachThiSinh` with column aliases (see `vnu-composer/apps/web/src/exce
 
 Composer setup **theo từng môn**: chọn môn → import DS → soạn/ghép đề → SBD & phiếu → **xuất đúng 1 ZIP** (`manifest.exportScope: single_subject`).
 
-- Tất cả USB dùng **cùng `packageId`** → Edge gộp vào **một ca thi** khi import lần lượt đúng khung giờ
+- **Mỗi lần xuất USB** sinh **`packageId` mới** (`randomUUID`) — các môn **không** gộp ca trên Edge
+- Chỉ **SBD** (6 chữ số) giữ chung giữa các môn khi soạn trên Composer
 - Mỗi khung giờ: **một USB** — một môn — import rồi rút USB (niêm phong vật lý)
-- Import từng môn **không xóa** slot/credentials môn khác (partial import)
+- Edge: mỗi ZIP = **một ca thi độc lập**; import môn mới chỉ sau **Xuất gói phòng thi (ZIP)**
 - Tên file: `exam-{packageId8}-{SUBJECT}-{YYYYMMDD}-{HHmm}.zip` (ví dụ `exam-a1b2c3d4-MATH-20260626-0730.zip`)
 - Xuất full / bulk nhiều môn: chỉ trong **Nâng cao** Composer (không dùng ngày thi)
 
-Proctor: `GET /api/proctor/sessions/current/import-status` — checklist môn đã/chưa import.
+Proctor: `GET /api/proctor/packages/status` — `canImportNewPackage`, `roomExportedAt`; `GET /api/proctor/sessions/:id/room-archive` — gói ZIP đầy đủ trước import môn tiếp.
 
 After changing `kit.ts`, `exam-package.ts`, or `blueprint-validator.ts`, bump both repos to the same semver and run:
 
@@ -57,9 +58,9 @@ node scripts/kit-sync-check.mjs
 
 ## Workflow ngày G
 
-1. **Composer:** Cấu hình ca (packageId, GK/CK) → **lặp từng môn:** chọn môn → lịch → DS → đề → SBD/phiếu → **Xuất USB** → niêm phong.
+1. **Composer:** Cấu hình ca → **lặp từng môn:** chọn môn → lịch → DS → đề → SBD/phiếu → **Xuất USB** (packageId mới mỗi ZIP) → niêm phong.
 2. **USB:** Mỗi USB một file ZIP một môn; ghi nhãn môn + giờ mở đề.
-3. **Proctor:** Đúng khung giờ — dry-run → import USB môn đó → checklist import → **Lịch môn** mở đề → Giám sát.
+3. **Proctor:** Đúng khung giờ — dry-run → import USB môn đó → thi + giám sát → **Xuất gói phòng thi (ZIP)** → import USB môn tiếp theo.
 4. **Student:** Tài khoản môn + mật khẩu → chờ/mở đề → làm bài → kết quả theo phần.
 
 ## 11 môn TN THPT QĐ764

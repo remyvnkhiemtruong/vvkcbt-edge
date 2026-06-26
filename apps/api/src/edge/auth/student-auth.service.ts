@@ -16,6 +16,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { RateLimitService } from '../../shared/rate-limit/rate-limit.service';
 import { ProctoringGateway } from '../proctoring/proctoring.gateway';
+import { SubjectRoomCompletionService } from '../proctoring/subject-room-completion.service';
 
 @Injectable()
 export class StudentAuthService {
@@ -34,6 +35,7 @@ export class StudentAuthService {
     private readonly configService: ConfigService,
     private readonly rateLimit: RateLimitService,
     private readonly proctoringGateway: ProctoringGateway,
+    private readonly subjectRoomCompletion: SubjectRoomCompletionService,
   ) {}
 
   async getRoomContext() {
@@ -47,7 +49,7 @@ export class StudentAuthService {
 
     if (examSessionId) {
       const session = await this.examSessionRepo.findOne({ where: { id: examSessionId } });
-      if (!session) throw new NotFoundException('Configured exam session not found');
+      if (!session) throw new NotFoundException('Không tìm thấy ca thi đã cấu hình');
       sessionName = session.name;
     } else {
       const sessions = await this.examSessionRepo.find({
@@ -58,7 +60,7 @@ export class StudentAuthService {
       const active = tnSession ?? sessions[0];
       if (!active) {
         const latest = await this.examSessionRepo.findOne({ order: { createdAt: 'DESC' } });
-        if (!latest) throw new NotFoundException('No exam session available');
+        if (!latest) throw new NotFoundException('Chưa có ca thi khả dụng');
         examSessionId = latest.id;
         sessionName = latest.name;
       } else {
@@ -100,12 +102,12 @@ export class StudentAuthService {
       });
     }
 
-    if (!session) throw new UnauthorizedException('Invalid account or PIN');
+    if (!session) throw new UnauthorizedException('Sai tài khoản hoặc mã PIN');
     const valid = await bcrypt.compare(pin, session.pinHash);
-    if (!valid) throw new UnauthorizedException('Invalid account or PIN');
+    if (!valid) throw new UnauthorizedException('Sai tài khoản hoặc mã PIN');
 
     if (session.boundIp && session.boundIp !== clientIp) {
-      throw new UnauthorizedException('IP binding mismatch');
+      throw new UnauthorizedException('Máy không khớp phòng thi đã gán');
     }
 
     if (!session.boundIp) {
@@ -170,7 +172,7 @@ export class StudentAuthService {
   }
 
   async listSlots(session: StudentSession) {
-    if (!session.studentId) throw new BadRequestException('No student linked');
+    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
     const slots = await this.examRouter.listSubjectSlots(session.studentId, session.examSessionId);
     if (session.subjectCode) {
       return slots.filter((s) => s.subjectCode === session.subjectCode);
@@ -179,7 +181,7 @@ export class StudentAuthService {
   }
 
   async startSlot(session: StudentSession, slotId: string) {
-    if (!session.studentId) throw new BadRequestException('No student linked');
+    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
     const started = await this.examRouter.startSubjectSlot(
       slotId,
       session.studentId,
@@ -197,7 +199,7 @@ export class StudentAuthService {
   }
 
   async prefetchSlot(session: StudentSession, slotId: string) {
-    if (!session.studentId) throw new BadRequestException('No student linked');
+    if (!session.studentId) throw new BadRequestException('Chưa liên kết thí sinh');
     try {
       const { slot, paper } = await this.examRouter.prefetchSlotPaper(
         session.studentId,
@@ -224,7 +226,7 @@ export class StudentAuthService {
       where: { id: session.id },
       relations: ['examPaper', 'examSession'],
     });
-    if (!sessionWithPaper?.examPaper) throw new BadRequestException('No exam paper assigned');
+    if (!sessionWithPaper?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
 
     const paper = sessionWithPaper.examPaper;
     const rawQuestions = paper.questions as Array<Record<string, unknown>>;
@@ -334,9 +336,9 @@ export class StudentAuthService {
   async submit(session: StudentSession, ip: string) {
     const sessionFull = await this.sessionRepo.findOne({
       where: { id: session.id },
-      relations: ['examPaper', 'examSession'],
+      relations: ['examPaper', 'examSession', 'student'],
     });
-    if (!sessionFull?.examPaper) throw new BadRequestException('No exam paper assigned');
+    if (!sessionFull?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
 
     const isMultiSubject = this.examRouter.isTnptPersonalized(sessionFull.examSession);
     const activeSlot = isMultiSubject
@@ -410,6 +412,16 @@ export class StudentAuthService {
       scoreTotal: result.total,
       partScores,
     });
+
+    const labRoom =
+      sessionFull.student?.labRoom?.trim() ||
+      this.configService.get<string>('EDGE_ROOM_NAME') ||
+      'Phòng máy số 1';
+    await this.subjectRoomCompletion.checkAfterSubmit(
+      sessionFull.examSessionId,
+      paper.subject,
+      labRoom,
+    );
 
     await this.auditService.log({
       eventType: AuditEventType.SUBMIT,

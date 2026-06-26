@@ -43,8 +43,12 @@ export class StaffUserService {
   }
 
   async validateLogin(username: string, password: string, role: StaffRole): Promise<boolean> {
-    const user = await this.repo.findOne({ where: { username, role } });
-    if (!user) return false;
-    return bcrypt.compare(password, user.passwordHash);
+    try {
+      const user = await this.repo.findOne({ where: { username, role } });
+      if (!user?.passwordHash?.startsWith('$2')) return false;
+      return bcrypt.compare(password, user.passwordHash);
+    } catch {
+      return false;
+    }
   }
 }

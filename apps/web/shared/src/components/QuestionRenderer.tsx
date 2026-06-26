@@ -23,6 +23,8 @@ interface Props {
   answer: unknown;
   onChange: (answer: unknown) => void;
   onClick?: () => void;
+  hideClusterPassage?: boolean;
+  readOnly?: boolean;
 }
 
 function renderStem(stem?: string) {
@@ -30,12 +32,20 @@ function renderStem(stem?: string) {
   return <RichTextContent content={stem} />;
 }
 
-export function QuestionRenderer({ question, answer, onChange, onClick }: Props) {
+export function QuestionRenderer({
+  question,
+  answer,
+  onChange,
+  onClick,
+  hideClusterPassage = false,
+  readOnly = false,
+}: Props) {
   const { content, type } = question;
   const passageText =
     content.passage ||
     question.passage?.body ||
     (content.body as string | undefined);
+  const disabled = readOnly;
 
   return (
     <div className="question" onClick={onClick}>
@@ -49,12 +59,13 @@ export function QuestionRenderer({ question, answer, onChange, onClick }: Props)
       {type === 'cluster_mcq' && content.options && (
         <ClusterSubtypeRenderer
           subtype={(content.subtype as string) || question.clusterSubtype}
-          passage={passageText}
+          passage={hideClusterPassage ? undefined : passageText}
           stem={content.stem}
           options={content.options}
           answer={answer}
           onChange={onChange}
           questionId={question.id}
+          readOnly={disabled}
         />
       )}
 
@@ -68,6 +79,7 @@ export function QuestionRenderer({ question, answer, onChange, onClick }: Props)
                   type="radio"
                   name={question.id}
                   checked={answer === key}
+                  disabled={disabled}
                   onChange={() => onChange(key)}
                 />
                 {opt}
@@ -85,6 +97,7 @@ export function QuestionRenderer({ question, answer, onChange, onClick }: Props)
               <label key={i}>
                 <span>{stmt}</span>
                 <select
+                  disabled={disabled}
                   value={arr[i] === true ? 'true' : arr[i] === false ? 'false' : ''}
                   onChange={(e) => {
                     const next = [...arr];
@@ -107,6 +120,7 @@ export function QuestionRenderer({ question, answer, onChange, onClick }: Props)
           type="text"
           className="short-answer"
           value={(answer as string) || ''}
+          readOnly={disabled}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Nhập đáp án..."
         />
@@ -116,16 +130,21 @@ export function QuestionRenderer({ question, answer, onChange, onClick }: Props)
         <div>
           {question.part && (
             <p className="essay-part-label" style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-              {question.part === 'part1_reading' ? 'Phần I — Đọc hiểu (4 điểm)' : question.part === 'part2_writing' ? 'Phần II — Nghị luận (6 điểm)' : question.part}
+              {question.part === 'part1_reading'
+                ? 'Phần I — Đọc hiểu (4 điểm)'
+                : question.part === 'part2_writing'
+                  ? 'Phần II — Nghị luận (6 điểm)'
+                  : question.part}
             </p>
           )}
           <textarea
-          className="essay-answer"
-          rows={12}
-          value={(answer as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Viết bài của bạn tại đây..."
-        />
+            className="essay-answer"
+            rows={12}
+            value={(answer as string) || ''}
+            readOnly={disabled}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Viết bài của bạn tại đây..."
+          />
         </div>
       )}
     </div>
