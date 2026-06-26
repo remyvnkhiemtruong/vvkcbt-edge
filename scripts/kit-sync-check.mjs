@@ -11,7 +11,16 @@ const composerRoot = path.resolve(edgeRoot, '..', 'vnu-composer');
 const exactPairs = [
   ['packages/shared-types/src/blueprint-validator.ts', 'packages/shared-types/src/blueprint-validator.ts'],
   ['packages/shared-types/src/exam-package.ts', 'packages/shared-types/src/exam-package.ts'],
+  ['packages/shared-types/src/question-order.ts', 'packages/shared-types/src/question-order.ts'],
+  ['packages/shared-types/src/tn-thpt-catalog.ts', 'packages/shared-types/src/tn-thpt-catalog.ts'],
+  ['packages/shared-types/src/exam-structure.ts', 'packages/shared-types/src/exam-structure.ts'],
   ['packages/exam-package-kit/src/kit.ts', 'packages/exam-package-kit/src/kit.ts'],
+  ['apps/web/shared/src/utils/exam-clusters.ts', 'packages/web-shared/src/utils/exam-clusters.ts'],
+  ['apps/web/shared/src/components/ExamViewShell.tsx', 'packages/web-shared/src/components/ExamViewShell.tsx'],
+  ['apps/web/shared/src/components/ExamQuestionPalette.tsx', 'packages/web-shared/src/components/ExamQuestionPalette.tsx'],
+  ['apps/web/shared/src/components/QuestionRenderer.tsx', 'packages/web-shared/src/components/QuestionRenderer.tsx'],
+  ['apps/web/shared/src/styles/exam-view.css', 'packages/web-shared/src/styles/exam-view.css'],
+  ['apps/web/shared/src/theme/exam-theme.css', 'packages/web-shared/src/theme/exam-theme.css'],
 ];
 
 /** Composer-only files — required markers (column aliases, compose modes) */

@@ -23,23 +23,40 @@ export class ManualReviewService {
   async listPending(examSessionId?: string) {
     const qb = this.flagRepo
       .createQueryBuilder('f')
-      .leftJoin(StudentSession, 'ss', 'ss.id = f.student_session_id')
+      .leftJoin(StudentSession, 'ss', 'ss.id = f.studentSessionId')
       .where('f.status = :status', { status: 'pending' });
 
     if (examSessionId) {
-      qb.andWhere('ss.exam_session_id = :examSessionId', { examSessionId });
+      qb.andWhere('ss.examSessionId = :examSessionId', { examSessionId });
     }
 
-    const flags = await qb.orderBy('f.created_at', 'ASC').getMany();
+    const flags = await qb.orderBy('f.createdAt', 'ASC').getMany();
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
     const enriched = await Promise.all(
       flags.map(async (f) => {
-        const q = await this.questionRepo.findOne({ where: { id: f.questionId } });
-        const content = q?.content as { stem?: string } | undefined;
+        let questionStem = f.questionId;
+        let standardAnswer = '—';
+        let maxScore = 0.25;
+        if (uuidRe.test(f.questionId)) {
+          try {
+            const q = await this.questionRepo.findOne({ where: { id: f.questionId } });
+            if (q) {
+              const content = q.content as { stem?: string } | undefined;
+              questionStem = content?.stem?.slice(0, 120) ?? f.questionId;
+              standardAnswer = String(q.correctKey ?? '—');
+              maxScore = Number(q.maxScore ?? 0.25);
+            }
+          } catch {
+            /* question_bank lookup optional */
+          }
+        }
         return {
           ...f,
-          questionStem: content?.stem?.slice(0, 120) ?? f.questionId,
-          standardAnswer: String(q?.correctKey ?? '—'),
-          maxScore: Number(q?.maxScore ?? 0.25),
+          questionStem,
+          standardAnswer,
+          maxScore,
         };
       }),
     );

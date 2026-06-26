@@ -25,16 +25,15 @@ export function ApiStatusBanner({ pollMs = 10000 }: { pollMs?: number }) {
       const r = await fetch(`${API_BASE}/api/infra/health`, { cache: 'no-store' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = (await r.json()) as HealthResponse;
-      const degraded = d.status !== 'ok';
-      setDown(degraded);
-      setDetail(
-        degraded && d.checks
+      const criticalErrors =
+        d.checks != null
           ? Object.entries(d.checks)
-              .filter(([, v]) => v === 'error')
+              .filter(([k, v]) => v === 'error' && k !== 'puppeteer')
               .map(([k]) => k)
-              .join(', ')
-          : '',
-      );
+          : [];
+      const showBanner = d.status !== 'ok' && (criticalErrors.length > 0 || d.checks == null);
+      setDown(showBanner);
+      setDetail(criticalErrors.join(', '));
     } catch {
       setDown(true);
       setDetail('Không kết nối được máy chủ');

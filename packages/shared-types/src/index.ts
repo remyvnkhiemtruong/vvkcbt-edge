@@ -135,3 +135,9 @@ export {
   BLUEPRINT_FIXTURES,
   buildValidEnglishClusters,
 } from './__fixtures__/blueprint-fixtures';
+export {
+  seededShuffle,
+  resolveQuestionPartKey,
+  enrichQuestionsWithPart,
+  orderQuestionsByPart,
+} from './question-order';

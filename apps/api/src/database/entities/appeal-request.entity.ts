@@ -15,16 +15,16 @@ export class AppealRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'exam_session_id' })
+  @Column({ name: 'exam_session_id', type: 'uuid' })
   examSessionId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   sbd: string;
 
-  @Column({ name: 'subject_code' })
+  @Column({ name: 'subject_code', type: 'varchar' })
   subjectCode: string;
 
-  @Column({ name: 'question_id', nullable: true })
+  @Column({ name: 'question_id', type: 'varchar', nullable: true })
   questionId: string | null;
 
   @Column({ type: 'text' })
@@ -33,7 +33,7 @@ export class AppealRequest {
   @Column({ type: 'varchar', default: 'pending' })
   status: AppealStatus;
 
-  @Column({ name: 'reviewed_by', nullable: true })
+  @Column({ name: 'reviewed_by', type: 'varchar', nullable: true })
   reviewedBy: string | null;
 
   @Column({ name: 'review_note', type: 'text', nullable: true })

@@ -77,7 +77,7 @@ export function ReportTab({ token, examSessionId }: { token: string; examSession
       )}
       <h3>Báo cáo & điểm</h3>
       <p className="admin-hint">
-        Xuất gói phòng thi (ZIP) đầy đủ trước khi import USB môn tiếp theo. File gồm Excel kết quả, nhật ký, biên bản điểm và bài làm PDF.
+        Xuất gói phòng thi (ZIP) khi cần lưu kết quả ca (Excel, nhật ký, biên bản, bài làm PDF). Không bắt buộc trước khi import môn khác.
       </p>
 
       {preview && (
@@ -124,7 +124,7 @@ export function ReportTab({ token, examSessionId }: { token: string; examSession
               token,
               `room-archive-${examSessionId.slice(0, 8)}-${ymd}-${hm}.zip`,
             );
-            showToast('info', 'Đã xuất gói phòng thi — có thể import gói môn tiếp theo.');
+            showToast('info', 'Đã xuất gói phòng thi.');
           } catch (e) {
             showToast('error', e instanceof Error ? e.message : 'Xuất gói phòng thi thất bại');
           } finally {

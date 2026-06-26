@@ -49,7 +49,7 @@ export function QuestionRenderer({
 
   return (
     <div className="question" onClick={onClick}>
-      {passageText && type !== 'cluster_mcq' && (
+      {passageText && !hideClusterPassage && type !== 'cluster_mcq' && (
         <div className="passage">
           <RichTextContent content={passageText} />
         </div>

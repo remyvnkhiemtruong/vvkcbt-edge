@@ -44,11 +44,11 @@ Composer setup **theo từng môn**: chọn môn → import DS → soạn/ghép 
 - **Mỗi lần xuất USB** sinh **`packageId` mới** (`randomUUID`) — các môn **không** gộp ca trên Edge
 - Chỉ **SBD** (6 chữ số) giữ chung giữa các môn khi soạn trên Composer
 - Mỗi khung giờ: **một USB** — một môn — import rồi rút USB (niêm phong vật lý)
-- Edge: mỗi ZIP = **một ca thi độc lập**; import môn mới chỉ sau **Xuất gói phòng thi (ZIP)**
+- Edge: mỗi ZIP = **một ca thi độc lập**; import môn mới **xóa ca cũ** trên máy (nên xuất gói phòng thi trước nếu cần lưu kết quả)
 - Tên file: `exam-{packageId8}-{SUBJECT}-{YYYYMMDD}-{HHmm}.zip` (ví dụ `exam-a1b2c3d4-MATH-20260626-0730.zip`)
 - Xuất full / bulk nhiều môn: chỉ trong **Nâng cao** Composer (không dùng ngày thi)
 
-Proctor: `GET /api/proctor/packages/status` — `canImportNewPackage`, `roomExportedAt`; `GET /api/proctor/sessions/:id/room-archive` — gói ZIP đầy đủ trước import môn tiếp.
+Proctor: `GET /api/proctor/packages/status` — `needsImportConfirm` khi đã có ca; `GET /api/proctor/sessions/:id/room-archive` — gói ZIP lưu kết quả (tùy chọn).
 
 After changing `kit.ts`, `exam-package.ts`, or `blueprint-validator.ts`, bump both repos to the same semver and run:
 
@@ -60,7 +60,7 @@ node scripts/kit-sync-check.mjs
 
 1. **Composer:** Cấu hình ca → **lặp từng môn:** chọn môn → lịch → DS → đề → SBD/phiếu → **Xuất USB** (packageId mới mỗi ZIP) → niêm phong.
 2. **USB:** Mỗi USB một file ZIP một môn; ghi nhãn môn + giờ mở đề.
-3. **Proctor:** Đúng khung giờ — dry-run → import USB môn đó → thi + giám sát → **Xuất gói phòng thi (ZIP)** → import USB môn tiếp theo.
+3. **Proctor:** Đúng khung giờ — dry-run → import USB môn đó → thi + giám sát → (tùy chọn) xuất gói phòng thi → import USB môn tiếp theo.
 4. **Student:** Tài khoản môn + mật khẩu → chờ/mở đề → làm bài → kết quả theo phần.
 
 ## 11 môn TN THPT QĐ764
@@ -100,3 +100,13 @@ cd ../vnu-composer && npm run test && npm run build
 # Kit sync (both repos checked out as siblings)
 node scripts/kit-sync-check.mjs
 ```
+
+### Exam UI sync (Student × Composer preview)
+
+Sau khi sửa giao diện làm bài, đồng bộ các file sau từ VNU Edge → `vnu-composer/packages/web-shared/` và `packages/shared-types/`:
+
+- `question-order.ts`, `tn-thpt-catalog.ts`, `exam-structure.ts`
+- `exam-clusters.ts`, `ExamViewShell.tsx`, `ExamQuestionPalette.tsx`, `QuestionRenderer.tsx`
+- `exam-view.css`, `exam-theme.css`, `index.ts` (web-shared)
+
+`kit-sync-check.mjs` kiểm tra hash khớp. Trước release, smoke preview **12 môn** TN_THPT trên Composer (`ExamPreviewPanel`) và ít nhất MATH + ENGLISH + LITERATURE trên Student.

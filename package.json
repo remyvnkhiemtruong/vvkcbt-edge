@@ -28,7 +28,8 @@
     "generate-seb": "node scripts/generate-seb.mjs",
     "kit-sync-check": "node scripts/kit-sync-check.mjs",
     "backup": "tsx scripts/backup-restore.ts backup",
-    "restore": "tsx scripts/backup-restore.ts restore"
+    "restore": "tsx scripts/backup-restore.ts restore",
+    "reset:exam": "node scripts/reset-exam-data.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.3",

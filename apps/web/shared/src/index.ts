@@ -1,4 +1,5 @@
 import './theme/cbt-base.css';
+import './theme/exam-theme.css';
 import './styles/exam-view.css';
 
 export { KaTeXBlock } from './components/KaTeXBlock';
@@ -6,6 +7,12 @@ export { RichTextContent, richTextToHtml } from './components/RichTextContent';
 export { QuestionRenderer } from './components/QuestionRenderer';
 export { ExamViewShell } from './components/ExamViewShell';
 export type { ExamUiMode, ExamQuestion, ExamViewShellProps } from './components/ExamViewShell';
+export { ExamQuestionPalette } from './components/ExamQuestionPalette';
+export { ExamThemeToggle } from './components/ExamThemeToggle';
+export { useExamTheme } from './hooks/useExamTheme';
+export type { ExamTheme, ExamThemePreference } from './hooks/useExamTheme';
+export { buildExamParts, buildExamClusters, findPartIndex, findClusterIndex, getPartLabelVi, isQuestionAnswered, countAnswered } from './utils/exam-clusters';
+export { formatRemaining } from './utils/exam-format';
 export { TimerBar } from './components/TimerBar';
 export { CbtBrandLogo } from './components/CbtBrandLogo';
 export { AudioPlayer } from './components/AudioPlayer';

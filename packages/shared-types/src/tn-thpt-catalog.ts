@@ -51,6 +51,7 @@ export const QD764_DEFAULT_STRUCTURES: ExamStructureTemplate[] = [
     durationMin: 120,
     totalScore: 10,
     uiMode: 'split_view',
+    shuffleWithinPart: false,
     cognitiveDistribution: DEFAULT_COGNITIVE_DISTRIBUTION,
     parts: {
       part1_reading: { score: 4.0, type: 'essay', subtype: 'comprehension' },
@@ -196,6 +197,7 @@ export const QD764_DEFAULT_STRUCTURES: ExamStructureTemplate[] = [
     durationMin: 50,
     totalScore: 10,
     uiMode: 'split_view',
+    shuffleWithinPart: false,
     cognitiveDistribution: DEFAULT_COGNITIVE_DISTRIBUTION,
     parts: {
       part1_cluster_mcq: { count: 40, score_per_item: 0.25, type: 'cluster_mcq' },

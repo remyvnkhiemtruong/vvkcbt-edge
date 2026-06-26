@@ -6,7 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
-import { StudentSessionStatus, AuditEventType, aggregatePartScores } from '@vnu/shared-types';
+import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsByPart } from '@vnu/shared-types';
 import { QuestionCluster } from '../../database/entities/question-cluster.entity';
 import { In } from 'typeorm';
 import { AuditService } from '../../shared/audit/audit.service';
@@ -206,15 +206,25 @@ export class StudentAuthService {
         session.examSessionId,
         slotId,
       );
-      const questions = (paper.questions as Record<string, unknown>[]).map((q) =>
+      const structure = getDefaultStructure(slot.subjectCode);
+      const partOrder = structure ? Object.keys(structure.parts) : [];
+      const rawQuestions = (paper.questions as Array<Record<string, unknown>>).map((q) =>
         this.scoringService.stripCorrectKey(q),
-      );
+      ) as Array<{ id: string; type?: string; part?: string; partKey?: string }>;
+      const normalized = enrichQuestionsWithPart(rawQuestions, structure ?? undefined);
+      const shuffleWithinPart = structure?.shuffleWithinPart ?? true;
+      const ordered =
+        partOrder.length > 0
+          ? orderQuestionsByPart(normalized, partOrder, `${session.id}:${slotId}`, {
+              shuffleWithinPart,
+            })
+          : normalized;
       return {
         slotId: slot.id,
         subject: slot.subjectCode,
         scheduledStart: slot.scheduledStart,
         scheduledEnd: slot.scheduledEnd,
-        paper: { id: paper.id, title: paper.title, questions },
+        paper: { id: paper.id, title: paper.title, questions: ordered },
       };
     } catch {
       throw new NotFoundException('Không tải được đề cho ca thi');
@@ -229,9 +239,30 @@ export class StudentAuthService {
     if (!sessionWithPaper?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
 
     const paper = sessionWithPaper.examPaper;
+    const examSession = sessionWithPaper.examSession;
+    const rules = examSession.rules;
+    const template = await this.examRouter.getStructureTemplateForSession(examSession, paper.subject);
+    const uiMode =
+      template?.uiMode ??
+      rules?.subjects?.find((s) => s.code === paper.subject)?.ui_mode ??
+      'vertical_focus';
+
     const rawQuestions = paper.questions as Array<Record<string, unknown>>;
+    const structure = template ?? getDefaultStructure(paper.subject);
+    const partOrder = structure ? Object.keys(structure.parts) : [];
+    const normalizedRaw = enrichQuestionsWithPart(
+      rawQuestions as Array<{ id: string; type?: string; part?: string; partKey?: string }>,
+      structure ?? undefined,
+    ) as Array<Record<string, unknown> & { id: string }>;
+    const shuffleWithinPart = structure?.shuffleWithinPart ?? true;
+    const orderedRaw: Array<Record<string, unknown> & { id: string }> =
+      partOrder.length > 0
+        ? (orderQuestionsByPart(normalizedRaw, partOrder, session.id, { shuffleWithinPart }) as Array<
+            Record<string, unknown> & { id: string }
+          >)
+        : normalizedRaw;
     const clusterIds = [
-      ...new Set(rawQuestions.map((q) => q.clusterId as string).filter(Boolean)),
+      ...new Set(orderedRaw.map((q) => q.clusterId as string).filter(Boolean)),
     ];
     const clusters =
       clusterIds.length > 0
@@ -239,9 +270,9 @@ export class StudentAuthService {
         : [];
     const clusterMap = new Map(clusters.map((c) => [c.id, c]));
 
-    const questions = rawQuestions.map((q) => {
+    const questions = orderedRaw.map((q) => {
       const stripped = this.scoringService.stripCorrectKey(q);
-      const cluster = q.clusterId ? clusterMap.get(q.clusterId as string) : undefined;
+      const cluster = q.clusterId ? clusterMap.get(String(q.clusterId)) : undefined;
       if (cluster) {
         const passageText =
           (cluster.passage as { text?: string })?.text ??
@@ -251,7 +282,7 @@ export class StudentAuthService {
           ...stripped,
           clusterSubtype: cluster.clusterSubtype,
           passage: cluster.passage,
-          part: q.part ?? stripped.part,
+          part: (q.part as string | undefined) ?? (stripped.part as string | undefined),
           content: {
             ...(stripped.content as Record<string, unknown>),
             subtype: cluster.clusterSubtype,
@@ -261,14 +292,6 @@ export class StudentAuthService {
       }
       return stripped;
     });
-
-    const examSession = sessionWithPaper.examSession;
-    const rules = examSession.rules;
-    const template = await this.examRouter.getStructureTemplateForSession(examSession, paper.subject);
-    const uiMode =
-      template?.uiMode ??
-      rules?.subjects?.find((s) => s.code === paper.subject)?.ui_mode ??
-      'vertical_focus';
 
     const now = new Date();
     let endsAt: string | undefined;
@@ -297,6 +320,7 @@ export class StudentAuthService {
       paperId: paper.id,
       title: paper.title,
       subject: paper.subject,
+      sessionName: examSession.name,
       questions,
       serverNow: now.toISOString(),
       endsAt,

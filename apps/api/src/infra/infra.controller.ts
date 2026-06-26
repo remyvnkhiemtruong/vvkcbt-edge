@@ -103,12 +103,11 @@ export class InfraController {
       checks.puppeteer = 'ok';
       checks.pdfEngine = 'puppeteer';
     } catch {
-      checks.puppeteer = 'error';
-      checks.pdfEngine = 'excel-fallback';
+      checks.puppeteer = 'skipped (excel-fallback)';
+      checks.pdfEngine = 'ok (excel-fallback)';
     }
 
-    const allOk = Object.entries(checks).every(([k, v]) => {
-      if (k === 'puppeteer') return true;
+    const allOk = Object.entries(checks).every(([, v]) => {
       return v === 'ok' || String(v).startsWith('ok') || String(v).startsWith('skipped');
     });
     return {

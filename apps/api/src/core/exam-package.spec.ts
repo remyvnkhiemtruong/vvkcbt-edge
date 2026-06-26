@@ -136,25 +136,18 @@ describe('Exam package ZIP structure', () => {
   });
 });
 
-describe('Import ZIP gate (independent subjects)', () => {
-  const blocksImport = (session: { roomExportedAt: Date | null } | null) =>
-    session != null && session.roomExportedAt == null;
-
-  const canImport = (session: { roomExportedAt: Date | null } | null) => !blocksImport(session);
-
-  it('blocks import when current session not room-exported', () => {
-    expect(blocksImport({ roomExportedAt: null })).toBe(true);
-    expect(canImport({ roomExportedAt: null })).toBe(false);
-  });
-
-  it('allows import after room archive export', () => {
-    expect(blocksImport({ roomExportedAt: new Date() })).toBe(false);
+describe('Import ZIP (independent subjects)', () => {
+  it('always allows import regardless of room export', () => {
+    const canImport = (_session: { roomExportedAt: Date | null } | null) => true;
+    expect(canImport({ roomExportedAt: null })).toBe(true);
     expect(canImport({ roomExportedAt: new Date() })).toBe(true);
+    expect(canImport(null)).toBe(true);
   });
 
-  it('allows first import on clean machine', () => {
-    expect(blocksImport(null)).toBe(false);
-    expect(canImport(null)).toBe(true);
+  it('purges when replacing an existing session', () => {
+    const shouldPurge = (sessionCount: number) => sessionCount > 0;
+    expect(shouldPurge(0)).toBe(false);
+    expect(shouldPurge(1)).toBe(true);
   });
 });
 

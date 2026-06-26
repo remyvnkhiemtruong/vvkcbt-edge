@@ -35,13 +35,13 @@
 
 - [ ] Thí sinh vào `http://<IP_LAN>/student/` — **tài khoản 6 số** + **PIN 8 số** (không phải SBD)
 - [ ] Giám thị theo dõi tab **Giám sát** (cảnh báo vi phạm + âm thanh)
-- [ ] Đến khung giờ môn tiếp theo: **Xuất gói phòng thi (ZIP)** tab Báo cáo → cắm USB môn đó → import → mở đề
+- [ ] Đến khung giờ môn tiếp theo: (tùy chọn) xuất gói phòng tab Báo cáo → cắm USB môn đó → import → mở đề
 - [ ] **Không** chạy `npm run seed` trên máy thi
 - [ ] Nếu mất điện: giữ máy chủ; Postgres/API tự khởi động lại khi có điện
 
 ## Sau ca thi
 
-- [ ] Tab **Báo cáo** → **Xuất gói phòng thi (ZIP)** (bắt buộc trước import môn khác)
+- [ ] Tab **Báo cáo** → **Xuất gói phòng thi (ZIP)** nếu cần lưu kết quả ca
 - [ ] Tab **Sao lưu** → `npm run backup` hoặc backup qua UI
 - [ ] Copy file backup ra USB
 - [ ] Tab **Báo cáo** / **Nhật ký** nếu cần đối soát
@@ -51,7 +51,7 @@
 | Vấn đề | Hành động |
 |--------|-----------|
 | API không lên | Kiểm tra Postgres port 5432; `npm run start:prod -w @vnu/api` |
-| Import lỗi / chặn import | Xuất gói phòng thi (ZIP) tab Báo cáo trước; dry-run ZIP trên CBT - Viewer |
+| Import lỗi | Dry-run ZIP trên CBT - Viewer; kiểm tra Docker/Postgres
 | Thí sinh không login | Kiểm tra ZIP đã import; đúng tài khoản môn (6 số) + PIN 8 số |
 | Mất mạng LAN | Bài đã autosave IndexedDB; chờ mạng để đồng bộ |
 

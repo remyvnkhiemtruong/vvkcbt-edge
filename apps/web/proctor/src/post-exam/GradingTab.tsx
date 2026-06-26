@@ -23,7 +23,7 @@ export function GradingTab({ token, examSessionId }: { token: string; examSessio
     setLoading(true);
     proctorApi<FlagRow[]>(`/post-exam/grading/pending?examSessionId=${examSessionId}`, token)
       .then(setRows)
-      .catch(console.error)
+      .catch(() => setRows([]))
       .finally(() => setLoading(false));
   };
 

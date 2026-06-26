@@ -215,18 +215,10 @@ function ProctorPrep({
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (packageStatus && !packageStatus.canImportNewPackage) {
-      showToast(
-        'error',
-        'Chưa xuất gói phòng thi — vào tab Báo cáo → Xuất gói phòng thi (ZIP) trước khi import USB môn khác.',
-      );
-      e.target.value = '';
-      return;
-    }
     if (
       packageStatus?.needsImportConfirm &&
       !window.confirm(
-        'Ca cũ đã xuất — import sẽ xóa dữ liệu trên máy và bắt đầu ca mới. Tiếp tục?',
+        'Đã có ca thi trên máy — import sẽ xóa dữ liệu ca hiện tại và bắt đầu ca mới. Tiếp tục?',
       )
     ) {
       e.target.value = '';
@@ -284,31 +276,20 @@ function ProctorPrep({
       )}
       <h2>Chuẩn bị kỳ thi</h2>
       <p className="admin-hint">
-        Mỗi USB = <strong>một môn, một ca</strong>. Xuất gói phòng thi (tab Báo cáo) trước khi import USB môn khác.
+        Mỗi USB = <strong>một môn, một ca</strong>. Import USB mới sẽ thay ca hiện tại trên máy (nên xuất gói phòng thi tab Báo cáo nếu cần lưu kết quả).
       </p>
-      {packageStatus && !packageStatus.canImportNewPackage && (
-        <p className="admin-hint" style={{ color: '#fca5a5' }}>
-          Ca hiện tại chưa xuất gói phòng — import bị chặn. Vào tab <strong>Báo cáo</strong> → Xuất gói phòng thi (ZIP).
-        </p>
-      )}
       <div className="proctor-prep-actions">
         <button type="button" className="cbt-btn cbt-btn-outline" onClick={downloadTemplate} disabled={busy}>
           Tải ZIP mẫu
         </button>
-        <label
-          className="cbt-btn cbt-btn-primary"
-          style={{
-            cursor: packageStatus && !packageStatus.canImportNewPackage ? 'not-allowed' : 'pointer',
-            opacity: packageStatus && !packageStatus.canImportNewPackage ? 0.55 : 1,
-          }}
-        >
+        <label className="cbt-btn cbt-btn-primary" style={{ cursor: 'pointer' }}>
           Import gói kỳ thi
           <input
             type="file"
             accept=".zip"
             hidden
             onChange={onImport}
-            disabled={busy || (packageStatus != null && !packageStatus.canImportNewPackage)}
+            disabled={busy}
           />
         </label>
         <label className="cbt-btn cbt-btn-outline" style={{ cursor: 'pointer' }}>

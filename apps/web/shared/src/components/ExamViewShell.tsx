@@ -1,6 +1,15 @@
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
+import { useMemo } from 'react';
 import { QuestionRenderer } from './QuestionRenderer';
+import { RichTextContent } from './RichTextContent';
 import { vi } from '../i18n/vi';
+import {
+  buildExamParts,
+  findPartIndex,
+  getPartLabelVi,
+  getQuestionPassageText,
+  isQuestionAnswered,
+} from '../utils/exam-clusters';
 
 export type ExamUiMode = 'split_view' | 'vertical_focus';
 
@@ -18,6 +27,7 @@ export interface ExamQuestion {
     statements?: string[];
     subtype?: string;
     audio_id?: string;
+    instruction?: string;
   };
   passage?: { title?: string; body?: string };
 }
@@ -27,12 +37,15 @@ export interface ExamViewShellProps {
   answers: Record<string, unknown>;
   onChange: (questionId: string, answer: unknown) => void;
   uiMode: ExamUiMode;
+  onViewModeChange?: (mode: ExamUiMode) => void;
   sharedPassage?: string;
   readOnly?: boolean;
-  showNav?: boolean;
   currentIdx?: number;
   onCurrentIdxChange?: (idx: number) => void;
   onQuestionClick?: (idx: number) => void;
+  fontScale?: number;
+  subjectCode?: string;
+  partOrder?: string[];
 }
 
 export function ExamViewShell({
@@ -40,92 +53,152 @@ export function ExamViewShell({
   answers,
   onChange,
   uiMode,
+  onViewModeChange,
   sharedPassage,
   readOnly = false,
-  showNav = true,
-  currentIdx: controlledIdx,
+  currentIdx = 0,
   onCurrentIdxChange,
   onQuestionClick,
+  fontScale = 1,
+  partOrder,
 }: ExamViewShellProps) {
-  const [internalIdx, setInternalIdx] = useState(0);
-  const currentIdx = controlledIdx ?? internalIdx;
-  const setCurrentIdx = onCurrentIdxChange ?? setInternalIdx;
+  const parts = useMemo(() => buildExamParts(questions, partOrder), [questions, partOrder]);
+  const partIdx = findPartIndex(parts, currentIdx);
+  const currentPart = parts[partIdx] ?? parts[0] ?? { start: 0, end: Math.max(0, questions.length - 1), partKey: '_default', label: 'Phần I', questionCount: questions.length };
+  const partQuestions = questions.slice(currentPart.start, currentPart.end + 1);
 
-  const current = questions[currentIdx];
-  const hideClusterPassage = uiMode === 'vertical_focus' && !!sharedPassage;
+  const activePassage =
+    getQuestionPassageText(questions[currentIdx] ?? partQuestions[0]) ||
+    currentPart.passage ||
+    sharedPassage;
+  const hasPassage = !!activePassage?.trim();
+  const hidePassageInBody = hasPassage && (uiMode === 'split_view' || uiMode === 'vertical_focus');
 
   const handleChange = (questionId: string, answer: unknown) => {
     if (readOnly) return;
     onChange(questionId, answer);
   };
 
-  const passageBlock = sharedPassage ? (
-    <aside className="passage-panel">
-      <h3 className="passage-title">
-        {vi.exam.passageTitle} {vi.exam.passageRange(1, questions.length)}
-      </h3>
-      <p>{sharedPassage}</p>
-    </aside>
-  ) : null;
+  const rangeLabel =
+    currentPart.start === currentPart.end
+      ? vi.exam.questionNum(currentPart.start + 1)
+      : `Câu ${currentPart.start + 1}–${currentPart.end + 1}`;
+
+  const renderQuestionBlock = (q: ExamQuestion, i: number, globalIdx: number) => {
+    const answered = isQuestionAnswered(answers[q.id]);
+    return (
+      <div
+        key={q.id}
+        id={`q-${globalIdx}`}
+        className={`exam-q-block ${globalIdx === currentIdx ? 'is-current' : ''} ${answered ? 'is-answered' : ''}`}
+        onClick={() => {
+          onCurrentIdxChange?.(globalIdx);
+          onQuestionClick?.(globalIdx);
+        }}
+      >
+        <div className="exam-q-block__head">
+          <span className="exam-q-block__num">{globalIdx + 1}.</span>
+          {answered && <span className="exam-q-block__badge exam-q-block__badge--done">Đã làm</span>}
+        </div>
+        <QuestionRenderer
+          question={q as never}
+          answer={answers[q.id]}
+          onChange={(a) => handleChange(q.id, a)}
+          hideClusterPassage={hidePassageInBody}
+          readOnly={readOnly}
+        />
+        {i < partQuestions.length - 1 && <hr className="exam-q-divider" />}
+      </div>
+    );
+  };
+
+  const passageContent = (
+    <div className="exam-passage-box">
+      {partQuestions[0]?.content?.instruction && (
+        <p className="exam-passage-instruction">
+          <RichTextContent content={partQuestions[0].content.instruction} />
+        </p>
+      )}
+      {activePassage && <RichTextContent content={activePassage} />}
+    </div>
+  );
+
+  const partHeadingEl = (
+    <div className="part-divider">{currentPart.label || getPartLabelVi(currentPart.partKey)}</div>
+  );
 
   return (
-    <div className={`exam-view-shell exam-body ${uiMode === 'split_view' ? 'split-view' : 'vertical-focus'}`}>
-      {uiMode === 'split_view' && sharedPassage && passageBlock}
-
-      <main className="question-panel">
-        {uiMode === 'vertical_focus' ? (
-          <>
-            {sharedPassage && <div className="vertical-passage-sticky">{passageBlock}</div>}
-            {questions.map((q, i) => (
-              <div
-                key={q.id}
-                id={`q-${i}`}
-                tabIndex={0}
-                className="question"
-                onClick={() => onQuestionClick?.(i)}
-              >
-                <span className="q-num">{vi.exam.questionNum(i + 1)}</span>
-                <QuestionRenderer
-                  question={q as never}
-                  answer={answers[q.id]}
-                  onChange={(a) => handleChange(q.id, a)}
-                  hideClusterPassage={hideClusterPassage}
-                  readOnly={readOnly}
-                />
-              </div>
-            ))}
-          </>
-        ) : (
-          current && (
-            <>
-              <span className="q-num">{vi.exam.questionNum(currentIdx + 1)}</span>
-              <QuestionRenderer
-                question={current as never}
-                answer={answers[current.id]}
-                onChange={(a) => handleChange(current.id, a)}
-                readOnly={readOnly}
-              />
-            </>
-          )
+    <div
+      className="exam-card"
+      style={{ '--exam-font-scale': fontScale } as CSSProperties}
+    >
+      <div className="exam-card__toolbar">
+        <div className="exam-card__range">
+          <span className="exam-card__range-icon" aria-hidden>
+            ?
+          </span>
+          <span className="exam-card__range-text">{rangeLabel}</span>
+        </div>
+        {onViewModeChange && (
+          <select
+            className="exam-view-select"
+            value={uiMode}
+            onChange={(e) => onViewModeChange(e.target.value as ExamUiMode)}
+            aria-label={vi.exam.viewModeLabel}
+          >
+            <option value="split_view">{vi.exam.displayHorizontal}</option>
+            <option value="vertical_focus">{vi.exam.displayVertical}</option>
+          </select>
         )}
-      </main>
+      </div>
 
-      {uiMode === 'split_view' && showNav && questions.length > 1 && (
-        <nav className="q-nav" aria-label="Điều hướng câu hỏi">
-          {questions.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              className={i === currentIdx ? 'active' : ''}
-              onClick={() => {
-                setCurrentIdx(i);
-                onQuestionClick?.(i);
-              }}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </nav>
+      {uiMode === 'split_view' ? (
+        <div className={`exam-split ${hasPassage ? 'has-passage' : 'no-passage'}`}>
+          {hasPassage && (
+            <aside className="exam-split__passage">
+              <div className="exam-split__pane-inner">
+                {partHeadingEl}
+                {passageContent}
+              </div>
+            </aside>
+          )}
+          <main className="exam-split__questions">
+            <div className="exam-split__pane-inner">
+              {!hasPassage && partHeadingEl}
+              {partQuestions.map((q, i) => renderQuestionBlock(q, i, currentPart.start + i))}
+            </div>
+          </main>
+        </div>
+      ) : (
+        <main className="exam-vertical">
+          {hasPassage && (
+            <div className="exam-vertical__passage">
+              {partHeadingEl}
+              {passageContent}
+            </div>
+          )}
+          <div className="exam-vertical__questions">
+            {!hasPassage && partHeadingEl}
+            {partQuestions.map((q, i) => {
+              const globalIdx = currentPart.start + i;
+              const prevQ = i > 0 ? partQuestions[i - 1] : undefined;
+              const prevPassage = prevQ ? getQuestionPassageText(prevQ) : '';
+              const thisPassage = getQuestionPassageText(q);
+              const showInlinePassage =
+                !hasPassage && thisPassage && thisPassage !== prevPassage && uiMode === 'vertical_focus';
+              return (
+                <div key={q.id}>
+                  {showInlinePassage && (
+                    <div className="exam-passage-box exam-passage-box--inline">
+                      <RichTextContent content={thisPassage} />
+                    </div>
+                  )}
+                  {renderQuestionBlock(q, i, globalIdx)}
+                </div>
+              );
+            })}
+          </div>
+        </main>
       )}
     </div>
   );

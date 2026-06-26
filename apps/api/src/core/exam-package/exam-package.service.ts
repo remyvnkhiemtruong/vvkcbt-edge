@@ -1,7 +1,6 @@
 import {
   Injectable,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -44,6 +43,8 @@ import { AnonymizationMap } from '../../database/entities/anonymization-map.enti
 import { ProctorAction } from '../../database/entities/proctor-action.entity';
 import { AuditLog } from '../../database/entities/audit-log.entity';
 import { GdptSubjectStream } from '../../database/entities/gdpt-subject-stream.entity';
+import { AppealRequest } from '../../database/entities/appeal-request.entity';
+import { GradingFlag } from '../../database/entities/grading-flag.entity';
 import type { ExamPackageManifest } from '@vnu/shared-types';
 import { ExamMasterService } from '../exam-master/exam-master.service';
 
@@ -151,11 +152,6 @@ export class ExamPackageService {
     const manifest = validation.manifest;
 
     try {
-      const latestSession = await this.sessionRepo.findOne({ order: { updatedAt: 'DESC' } });
-      if (latestSession && !latestSession.roomExportedAt) {
-        throw new ConflictException('Chưa xuất gói phòng thi — không thể import gói mới');
-      }
-
       const existingSessionCount = await this.sessionRepo.count();
 
       const sessionConfig = JSON.parse(
@@ -167,6 +163,7 @@ export class ExamPackageService {
 
       this.validateSingleSubjectImport(workDir, manifest, subjects);
       sessionConfig.rules = this.mergeSubjectsIntoRules(sessionConfig.rules, subjects);
+      const isSingleSubject = manifest.exportScope === 'single_subject';
 
       let studentsCreated = 0;
       let studentsUpdated = 0;
@@ -275,7 +272,7 @@ export class ExamPackageService {
             studentRows,
             subjects,
             hasCredentials,
-            false,
+            isSingleSubject,
           );
           studentsCreated += slotStats.studentsCreated;
           studentsUpdated += slotStats.studentsUpdated;
@@ -401,27 +398,29 @@ export class ExamPackageService {
       };
     }
 
-    const exported = latest.roomExportedAt != null;
     return {
       examSessionId: latest.id,
       sessionName: latest.name,
       packageId: latest.packageId,
       roomExportedAt: latest.roomExportedAt?.toISOString() ?? null,
       status: latest.status,
-      canImportNewPackage: exported,
-      needsImportConfirm: exported,
+      canImportNewPackage: true,
+      needsImportConfirm: true,
     };
   }
 
   private async purgeAllEdgeExamData(manager: EntityManager): Promise<void> {
+    await manager.getRepository(GradingFlag).createQueryBuilder().delete().execute();
+    await manager.getRepository(AppealRequest).createQueryBuilder().delete().execute();
     await manager.getRepository(AnonymizationMap).createQueryBuilder().delete().execute();
     await manager.getRepository(ProctorAction).createQueryBuilder().delete().execute();
     await manager.getRepository(AuditLog).createQueryBuilder().delete().execute();
-    await manager.getRepository(StudentSession).createQueryBuilder().delete().execute();
     await manager.getRepository(StudentSubjectSlot).createQueryBuilder().delete().execute();
+    await manager.getRepository(StudentSession).createQueryBuilder().delete().execute();
     await manager.getRepository(GdptSubjectStream).createQueryBuilder().delete().execute();
     await manager.getRepository(ExamPaper).createQueryBuilder().delete().execute();
     await manager.getRepository(ExamSession).createQueryBuilder().delete().execute();
+    await manager.getRepository(QuestionBank).createQueryBuilder().delete().execute();
     await manager.getRepository(QuestionCluster).createQueryBuilder().delete().execute();
   }
 
@@ -498,7 +497,11 @@ export class ExamPackageService {
     let slotsRemoved = 0;
 
     for (const row of rows) {
-      if (!partialImport && (!row.subjects.includes('LITERATURE') || !row.subjects.includes('MATH'))) {
+      // Full multi-subject packages (legacy) require Văn + Toán; single_subject USB has one môn per HS.
+      if (
+        !partialImport &&
+        (!row.subjects.includes('LITERATURE') || !row.subjects.includes('MATH'))
+      ) {
         throw new BadRequestException(`HS ${row.studentCode}: thiếu Văn hoặc Toán`);
       }
 

@@ -44,6 +44,8 @@ export interface ExamStructureTemplate {
   clusterLayout?: { clusters: ClusterLayoutItem[]; total_mcq: number };
   cognitiveDistribution?: { nhan_biet: number; thong_hieu: number; van_dung: number };
   uiMode: 'split_view' | 'vertical_focus';
+  /** Khi false: giữ thứ tự câu trong phần (Văn, Anh). Mặc định true. */
+  shuffleWithinPart?: boolean;
   parentTemplateId?: string;
 }
 

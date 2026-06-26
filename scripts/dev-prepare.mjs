@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,6 +19,31 @@ function tryRun(cmd) {
   } catch {
     return false;
   }
+}
+
+function isPortOpen(host, port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port, timeout: timeoutMs });
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function waitForPorts(ports, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const results = await Promise.all(ports.map((p) => isPortOpen('127.0.0.1', p)));
+    if (results.every(Boolean)) return true;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return false;
 }
 
 // 1. .env
@@ -92,15 +118,41 @@ freePort(3000);
 
 // 3. Docker infra (Postgres + Redis)
 console.log('Starting PostgreSQL + Redis...');
-if (!tryRun('docker compose -f docker/docker-compose.yml up -d postgres redis')) {
-  console.warn(
-    'Could not start Docker services. Ensure Postgres (5432) and Redis (6379) are already running.',
-  );
+const dockerOk = tryRun('docker compose -f docker/docker-compose.yml up -d postgres redis');
+if (!dockerOk) {
+  console.warn('Could not start Docker services.');
 }
 
-// 3. Wait for ports
+const pgUp = await isPortOpen('127.0.0.1', 5432);
+const redisUp = await isPortOpen('127.0.0.1', 6379);
+
+if (!pgUp || !redisUp) {
+  console.error('\n========================================');
+  console.error('  Postgres (5432) hoặc Redis (6379) chưa chạy');
+  console.error('========================================');
+  console.error(`  PostgreSQL: ${pgUp ? 'OK' : 'CHƯA MỞ'}`);
+  console.error(`  Redis:      ${redisUp ? 'OK' : 'CHƯA MỞ'}`);
+  console.error('');
+  console.error('  Cách 1 — Docker Desktop (khuyên dùng dev):');
+  console.error('    1. Mở Docker Desktop, đợi trạng thái Running');
+  console.error('    2. Chạy lại: npm run dev');
+  console.error('');
+  console.error('  Cách 2 — Chỉ khởi động DB (Docker đã cài):');
+  console.error('    docker compose -f docker/docker-compose.yml up -d postgres redis');
+  console.error('');
+  console.error('  Cách 3 — Native (không Docker): cài Postgres 16 + Redis,');
+  console.error('    tạo DB vnu_exam user vnu/vnu_secret, rồi npm run dev');
+  console.error('========================================\n');
+  process.exit(1);
+}
+
+// 3b. Wait for ports (healthy after docker start)
 console.log('Waiting for database and Redis...');
-tryRun('npx wait-on tcp:127.0.0.1:5432 tcp:127.0.0.1:6379 -t 120000');
+const ready = await waitForPorts([5432, 6379], 120000);
+if (!ready) {
+  console.error('ERROR: Postgres/Redis không phản hồi sau 120s.');
+  process.exit(1);
+}
 
 // 4. Build shared types (API depends on dist)
 tryRun('npm run build -w @vnu/shared-types');
