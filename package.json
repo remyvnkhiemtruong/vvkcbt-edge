@@ -1,0 +1,38 @@
+{
+  "name": "vnu-edge-exam",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "apps/web/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @vnu/shared-types && npm run build -w @vnu/exam-package-kit && npm run build -w @vnu/api && npm run build -w @vnu/student && npm run build -w @vnu/proctor",
+    "build:prod": "npm run build",
+    "dev": "node scripts/dev-prepare.mjs && concurrently --kill-others-on-fail -n API,Student,Proctor -c blue,green,yellow \"npm run dev:api\" \"npm run dev:student\" \"npm run dev:proctor\"",
+    "dev:prepare": "node scripts/dev-prepare.mjs",
+    "dev:apps": "concurrently --kill-others-on-fail -n API,Student,Proctor -c blue,green,yellow \"npm run dev:api\" \"npm run dev:student\" \"npm run dev:proctor\"",
+    "dev:api": "npm run start:dev -w @vnu/api",
+    "dev:student": "npm run dev -w @vnu/student",
+    "dev:proctor": "npm run dev -w @vnu/proctor",
+    "dev:infra": "docker compose -f docker/docker-compose.yml up -d postgres redis",
+    "migration:run": "npm run migration:run -w @vnu/api",
+    "migration:generate": "npm run migration:generate -w @vnu/api",
+    "seed": "npm run seed -w @vnu/api",
+    "test": "npm run test -w @vnu/shared-types && npm run test -w @vnu/exam-package-kit && npm run test -w @vnu/api",
+    "test:zip-roundtrip": "npm run test:zip-roundtrip -w @vnu/api",
+    "test:e2e": "playwright test",
+    "kit-sync-check": "node scripts/kit-sync-check.mjs",
+    "backup": "tsx scripts/backup-restore.ts backup",
+    "restore": "tsx scripts/backup-restore.ts restore"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "wait-on": "^8.0.5",
+    "@playwright/test": "^1.49.1",
+    "pg": "^8.13.1"
+  }
+}

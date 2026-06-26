@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  VVKCBT Student SEB template — THPT Võ Văn Kiệt
+  1. Mở bằng Safe Exam Browser Configuration Tool
+  2. Đổi startURL và URLFilterRules theo IP LAN máy Edge
+  3. Export as .seb và phát cho máy thí sinh
+-->
+<plist version="1.0">
+<dict>
+  <key>startURL</key>
+  <string>http://192.168.1.50/student/</string>
+  <key>startURLAllowDeepLink</key>
+  <false/>
+  <key>allowQuit</key>
+  <false/>
+  <key>quitURLConfirm</key>
+  <true/>
+  <key>hashedQuitPassword</key>
+  <string></string>
+  <key>URLFilterEnable</key>
+  <true/>
+  <key>URLFilterEnableContentFilter</key>
+  <false/>
+  <key>URLFilterRules</key>
+  <array>
+    <dict>
+      <key>action</key>
+      <integer>1</integer>
+      <key>active</key>
+      <true/>
+      <key>expression</key>
+      <string>192.168.1.50</string>
+      <key>regex</key>
+      <false/>
+    </dict>
+    <dict>
+      <key>action</key>
+      <integer>0</integer>
+      <key>active</key>
+      <true/>
+      <key>expression</key>
+      <string>.*</string>
+      <key>regex</key>
+      <true/>
+    </dict>
+  </array>
+  <key>browserViewMode</key>
+  <integer>1</integer>
+  <key>mainBrowserWindowWidth</key>
+  <string>100%</string>
+  <key>mainBrowserWindowHeight</key>
+  <string>100%</string>
+  <key>enableTouchExit</key>
+  <false/>
+  <key>allowVirtualMachine</key>
+  <false/>
+  <key>allowScreenCapture</key>
+  <false/>
+  <key>allowSpellCheck</key>
+  <false/>
+  <key>allowDictionaryLookup</key>
+  <false/>
+  <key>allowFind</key>
+  <false/>
+  <key>allowPrint</key>
+  <false/>
+  <key>allowDownloads</key>
+  <false/>
+  <key>allowCustomDownUploadLocation</key>
+  <false/>
+  <key>examSessionClearCookiesOnEnd</key>
+  <true/>
+  <key>examSessionClearCookiesOnStart</key>
+  <true/>
+  <key>browserUserAgent</key>
+  <string>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB</string>
+</dict>
+</plist>

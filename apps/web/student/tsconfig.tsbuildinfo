@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/store.ts","./src/hooks/useautosave.ts","./src/hooks/usefocusguard.ts","./src/pages/exampage.tsx","./src/pages/loginpage.tsx","./src/pages/resultpage.tsx"],"errors":true,"version":"5.9.3"}

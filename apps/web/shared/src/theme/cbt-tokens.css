@@ -1,0 +1,53 @@
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-Bold.woff2') format('woff2');
+}
+
+:root {
+  --cbt-navy: #0f172a;
+  --cbt-navy-light: #1a237e;
+  --cbt-primary: #2563eb;
+  --cbt-primary-hover: #1d4ed8;
+  --cbt-bg: #f0f2f5;
+  --cbt-surface: #ffffff;
+  --cbt-border: #e2e8f0;
+  --cbt-text: #1e293b;
+  --cbt-text-muted: #64748b;
+  --cbt-success: #16a34a;
+  --cbt-success-bg: #dcfce7;
+  --cbt-success-border: #22c55e;
+  --cbt-warning: #d97706;
+  --cbt-warning-bg: #fef3c7;
+  --cbt-warning-border: #f59e0b;
+  --cbt-danger: #dc2626;
+  --cbt-danger-bg: #fee2e2;
+  --cbt-danger-border: #ef4444;
+  --cbt-empty: #94a3b8;
+  --cbt-empty-bg: #f1f5f9;
+  --cbt-grace-bg: #fffbeb;
+  --cbt-grace-border: #fbbf24;
+  --cbt-passage-border: #93c5fd;
+  --cbt-radius: 12px;
+  --cbt-radius-sm: 8px;
+  --cbt-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+  --cbt-font: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+}

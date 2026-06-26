@@ -1,0 +1,604 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { createHash, randomUUID } from 'crypto';
+import archiver from 'archiver';
+import { createWriteStream } from 'fs';
+import extract from 'extract-zip';
+import {
+  EXAM_PACKAGE_FORMAT_VERSION,
+  ExamRules,
+  ExamType,
+  RoutingMode,
+  TN_THPT_SUBJECTS,
+  ExamPackageExportState,
+  ExamPackageManifest,
+  ExamPackageSessionConfig,
+  ExamPackageSubjectRow,
+  ExamPackageStudentRow,
+  ExamPackageValidateResult,
+  ExamPackagePaperRow,
+  ExamPackageClusterRow,
+  ExamPackageCredentialRow,
+  validateAllSubjectBlueprints,
+  BLUEPRINT_FIXTURES,
+  buildValidEnglishClusters,
+} from '@vnu/shared-types';
+
+export const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+export const REQUIRED_FILES = ['manifest.json', 'session.json', 'subjects.json'];
+
+export function defaultExamRules(): ExamRules {
+  return {
+    exam_type: ExamType.TN_THPT_2025,
+    structure: { source: 'QD764' as const, is_custom: false },
+    cognitive_distribution: { nhan_biet: 0.4, thong_hieu: 0.3, van_dung: 0.3 },
+    subjects: TN_THPT_SUBJECTS.map((s) => ({
+      code: s.code,
+      structureMode: 'default' as const,
+      ui_mode: s.uiMode,
+    })),
+    scoring: {
+      true_false_branch: { '1': 0.1, '2': 0.25, '3': 0.5, '4': 1.0 },
+      short_answer_normalize: ['comma_to_dot', 'trim_whitespace'] as ('comma_to_dot' | 'trim_whitespace')[],
+    },
+    proctoring: {
+      max_focus_violations: 3,
+      autosave_interval_sec: 3,
+      release_mode: 'proctor_at_time',
+      grace_before_min: 5,
+      grace_after_min: 15,
+      require_fullscreen: true,
+      block_copy_paste: true,
+      block_context_menu: true,
+      watermark: true,
+      single_active_session: true,
+    },
+    audio: { max_plays: 2, seek_disabled: true },
+  };
+}
+
+export function validateExportState(
+  state: ExamPackageExportState,
+  opts?: { subjectCode?: string },
+): ExamPackageValidateResult {
+  const subjectCode = opts?.subjectCode ?? state.manifest.subjectCode;
+  const isSingle = !!opts?.subjectCode || state.manifest.exportScope === 'single_subject';
+  if (isSingle && subjectCode) {
+    return validateSingleSubjectExport(state, subjectCode);
+  }
+  return validateFullExport(state);
+}
+
+function validateCredentialRows(
+  creds: ExamPackageCredentialRow[],
+  errors: string[],
+): void {
+  const seenAccounts = new Set<string>();
+  for (const c of creds) {
+    if (!c.examAccount?.trim()) errors.push(`Thiếu tài khoản: ${c.fullName} / ${c.subjectCode}`);
+    else if (!/^\d{6}$/.test(c.examAccount.trim())) {
+      errors.push(`Tài khoản phải 6 chữ số: ${c.examAccount}`);
+    } else if (seenAccounts.has(c.examAccount)) {
+      errors.push(`Tài khoản trùng: ${c.examAccount}`);
+    } else {
+      seenAccounts.add(c.examAccount);
+    }
+    if (!c.pin?.trim()) errors.push(`Thiếu PIN: ${c.fullName} / ${c.subjectCode}`);
+    else if (!/^\d{8}$/.test(c.pin.trim())) {
+      errors.push(`PIN phải 8 chữ số: ${c.fullName} / ${c.subjectCode}`);
+    }
+    if (!c.sbd?.trim()) errors.push(`Thiếu SBD: ${c.fullName}`);
+  }
+}
+
+function validateSingleSubjectExport(
+  state: ExamPackageExportState,
+  subjectCode: string,
+): ExamPackageValidateResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!state.manifest?.packageId) errors.push('Thiếu manifest.packageId');
+  if (!state.session?.name?.trim()) errors.push('Thiếu tên kỳ thi');
+
+  const paper = state.papers?.[subjectCode];
+  if (!paper?.questions?.length) {
+    errors.push(`Môn ${subjectCode} chưa có đề hoặc thiếu câu hỏi`);
+  }
+
+  const students = (state.students ?? []).filter((st) => st.subjects.includes(subjectCode));
+  if (!students.length) warnings.push(`Không có thí sinh đăng ký môn ${subjectCode}`);
+
+  const creds = (state.credentials ?? []).filter((c) => c.subjectCode === subjectCode);
+  if (creds.length) {
+    validateCredentialRows(creds, errors);
+  } else {
+    for (const st of students) {
+      if (!st.sbd?.trim() || !st.pin?.trim()) {
+        errors.push(`Thí sinh ${st.fullName}: chưa có SBD/PIN cho môn ${subjectCode}`);
+      }
+    }
+  }
+
+  if (!state.credentialsAssignedAt) errors.push('Chưa xếp SBD & gán PIN trong Composer');
+  if (!state.credentialsPrintedAt) {
+    errors.push('Chưa in phiếu thí sinh — in phiếu tại Composer trước khi xuất ZIP');
+  }
+
+  const blueprint = validateAllSubjectBlueprints(
+    state.papers ?? {},
+    [subjectCode],
+    state.clusters,
+    state.manifest?.mediaManifest,
+  );
+  errors.push(...blueprint.errors);
+  warnings.push(...blueprint.warnings);
+
+  return { valid: errors.length === 0, manifest: state.manifest, errors, warnings };
+}
+
+function validateFullExport(state: ExamPackageExportState): ExamPackageValidateResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!state.manifest?.packageId) errors.push('Thiếu manifest.packageId');
+  if (!state.session?.name?.trim()) errors.push('Thiếu tên kỳ thi');
+
+  for (const code of ['LITERATURE', 'MATH']) {
+    const paper = state.papers?.[code];
+    if (!paper?.questions?.length) {
+      errors.push(`Môn bắt buộc ${code} chưa có đề hoặc thiếu câu hỏi`);
+    }
+  }
+
+  const allSubjects = new Set<string>();
+  for (const st of state.students ?? []) {
+    for (const sub of st.subjects ?? []) allSubjects.add(sub);
+  }
+
+  const creds = state.credentials ?? [];
+  if (creds.length > 0) {
+    validateCredentialRows(creds, errors);
+  } else {
+    for (const st of state.students ?? []) {
+      if (!st.sbd?.trim() || !st.pin?.trim()) {
+        errors.push(`Thí sinh ${st.fullName}: chưa có SBD/PIN — xếp & in phiếu tại Composer trước khi xuất`);
+      }
+    }
+  }
+
+  for (const sub of allSubjects) {
+    const paper = state.papers?.[sub];
+    if (!paper?.questions?.length) {
+      errors.push(`Thí sinh đăng ký môn ${sub} nhưng thiếu papers/${sub}.json`);
+    }
+  }
+
+  if (!state.students?.length) warnings.push('Chưa có danh sách thí sinh');
+  if (!state.credentialsAssignedAt) errors.push('Chưa xếp SBD & gán PIN trong Composer');
+  if (!state.credentialsPrintedAt) {
+    errors.push('Chưa in phiếu thí sinh — in phiếu tại Composer trước khi xuất ZIP');
+  }
+
+  const qCount = Object.values(state.papers ?? {}).reduce((n, p) => n + (p.questions?.length ?? 0), 0);
+  if (qCount === 0) warnings.push('Ngân hàng câu hỏi trống');
+
+  const subjectsToValidate = new Set<string>(['LITERATURE', 'MATH', ...allSubjects]);
+  const blueprint = validateAllSubjectBlueprints(
+    state.papers ?? {},
+    [...subjectsToValidate],
+    state.clusters,
+    state.manifest?.mediaManifest,
+  );
+  errors.push(...blueprint.errors);
+  warnings.push(...blueprint.warnings);
+
+  return { valid: errors.length === 0, manifest: state.manifest, errors, warnings };
+}
+
+/** Tách state cho xuất một môn — giữ nguyên packageId để Edge gộp nhiều ZIP */
+export function sliceStateForSubject(
+  state: ExamPackageExportState,
+  subjectCode: string,
+): ExamPackageExportState {
+  const subjectRow = state.subjects.find((s) => s.code === subjectCode);
+  if (!subjectRow) throw new Error(`Môn ${subjectCode} chưa bật trong lịch thi`);
+
+  const paper = state.papers[subjectCode];
+  if (!paper?.questions?.length) throw new Error(`Môn ${subjectCode} chưa có đề`);
+
+  const students = state.students
+    .filter((st) => st.subjects.includes(subjectCode))
+    .map((st) => ({ ...st, subjects: [subjectCode] }));
+
+  const credentials = state.credentials?.filter((c) => c.subjectCode === subjectCode);
+  const clusters = state.clusters.filter((c) => c.subject === subjectCode);
+  const ruleSubjects = (state.session.rules.subjects ?? []).filter((s) => s.code === subjectCode);
+
+  return {
+    manifest: {
+      ...state.manifest,
+      exportScope: 'single_subject',
+      subjectCode,
+      examName: `${state.manifest.examName} — ${subjectRow.nameVi}`,
+    },
+    session: {
+      ...state.session,
+      rules: {
+        ...state.session.rules,
+        subjects: ruleSubjects.length ? ruleSubjects : [{ code: subjectCode, structureMode: 'default', ui_mode: subjectRow.ui_mode }],
+      },
+    },
+    subjects: [subjectRow],
+    students,
+    credentials,
+    clusters,
+    papers: { [subjectCode]: paper },
+    mediaFiles: state.mediaFiles,
+    credentialsAssignedAt: state.credentialsAssignedAt,
+    credentialsPrintedAt: state.credentialsPrintedAt,
+  };
+}
+
+export async function exportSubjectFromState(
+  state: ExamPackageExportState,
+  subjectCode: string,
+): Promise<Buffer> {
+  const sliced = sliceStateForSubject(state, subjectCode);
+  const validation = validateExportState(sliced, { subjectCode });
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  return packState(sliced);
+}
+
+/** Tên file ZIP một môn — gắn packageId, môn, ngày và giờ mở đề */
+export function buildSubjectZipFilename(
+  state: ExamPackageExportState,
+  subjectCode: string,
+): string {
+  const row = state.subjects.find((s) => s.code === subjectCode);
+  const pkg = state.manifest.packageId.slice(0, 8);
+  const date = row?.examDate?.replace(/-/g, '') ?? 'nodate';
+  const time = row?.startTime?.replace(':', '') ?? '0000';
+  return `exam-${pkg}-${subjectCode}-${date}-${time}.zip`;
+}
+
+export async function exportAllSubjectsFromState(
+  state: ExamPackageExportState,
+): Promise<Array<{ subjectCode: string; buffer: Buffer; filename: string }>> {
+  const results: Array<{ subjectCode: string; buffer: Buffer; filename: string }> = [];
+  for (const sub of state.subjects) {
+    if (!state.papers[sub.code]?.questions?.length) continue;
+    const hasStudents = state.students.some((st) => st.subjects.includes(sub.code));
+    if (!hasStudents) continue;
+    try {
+      const buffer = await exportSubjectFromState(state, sub.code);
+      results.push({
+        subjectCode: sub.code,
+        buffer,
+        filename: buildSubjectZipFilename(state, sub.code),
+      });
+    } catch {
+      /* skip subjects that fail validation */
+    }
+  }
+  return results;
+}
+
+async function zipDirectory(sourceDir: string, outPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const output = createWriteStream(outPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    output.on('close', () => resolve());
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.directory(sourceDir, false);
+    archive.finalize();
+  });
+}
+
+export async function packState(state: ExamPackageExportState): Promise<Buffer> {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vnu-pkg-'));
+  try {
+    fs.writeFileSync(path.join(workDir, 'manifest.json'), JSON.stringify(state.manifest, null, 2));
+    fs.writeFileSync(path.join(workDir, 'session.json'), JSON.stringify(state.session, null, 2));
+    fs.writeFileSync(path.join(workDir, 'subjects.json'), JSON.stringify(state.subjects, null, 2));
+    fs.writeFileSync(path.join(workDir, 'students.json'), JSON.stringify(state.students, null, 2));
+    if (state.credentials?.length) {
+      fs.writeFileSync(path.join(workDir, 'credentials.json'), JSON.stringify(state.credentials, null, 2));
+    }
+    if (state.credentialsAssignedAt || state.credentialsPrintedAt) {
+      fs.writeFileSync(
+        path.join(workDir, 'credentials-meta.json'),
+        JSON.stringify(
+          { assignedAt: state.credentialsAssignedAt, printedAt: state.credentialsPrintedAt },
+          null,
+          2,
+        ),
+      );
+    }
+    fs.writeFileSync(path.join(workDir, 'clusters.json'), JSON.stringify(state.clusters, null, 2));
+    fs.writeFileSync(
+      path.join(workDir, 'HuongDan.txt'),
+      [
+        'HƯỚNG DẪN GÓI KỲ THI VNU',
+        '1. Soạn gói bằng VNU Composer',
+        '2. Tab SBD & in phiếu: xếp SBD/PIN và in phiếu TRƯỚC khi xuất ZIP',
+        '3. Giám thị import ZIP tại Proctor — SBD/PIN đã có sẵn trong gói',
+        '',
+      ].join('\n'),
+    );
+
+    const papersDir = path.join(workDir, 'papers');
+    fs.mkdirSync(papersDir, { recursive: true });
+    for (const [key, paper] of Object.entries(state.papers)) {
+      fs.writeFileSync(path.join(papersDir, `${key}.json`), JSON.stringify(paper, null, 2));
+    }
+
+    const mediaManifest = [...(state.manifest.mediaManifest ?? [])];
+    if (state.mediaFiles?.length) {
+      for (const mf of state.mediaFiles) {
+        const dest = path.join(workDir, mf.path);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, Buffer.from(mf.base64, 'base64'));
+        if (!mediaManifest.find((m) => m.path === mf.path)) {
+          const buf = Buffer.from(mf.base64, 'base64');
+          mediaManifest.push({
+            path: mf.path,
+            checksum: createHash('sha256').update(buf).digest('hex'),
+            mimeType: mf.mimeType,
+          });
+        }
+      }
+      state.manifest.mediaManifest = mediaManifest;
+      fs.writeFileSync(path.join(workDir, 'manifest.json'), JSON.stringify(state.manifest, null, 2));
+    }
+
+    const zipPath = path.join(path.dirname(workDir), `pkg-${Date.now()}.zip`);
+    await zipDirectory(workDir, zipPath);
+    const buf = fs.readFileSync(zipPath);
+    fs.unlinkSync(zipPath);
+    return buf;
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+export async function extractZipSafe(buffer: Buffer): Promise<string> {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vnu-import-'));
+  const zipPath = path.join(workDir, 'upload.zip');
+  fs.writeFileSync(zipPath, buffer);
+  const extractDir = path.join(workDir, 'extracted');
+  fs.mkdirSync(extractDir, { recursive: true });
+  await extract(zipPath, { dir: extractDir });
+  return extractDir;
+}
+
+export async function validateZip(buffer: Buffer): Promise<ExamPackageValidateResult> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (buffer.length > MAX_ZIP_BYTES) {
+    return { valid: false, errors: ['File ZIP vượt quá 100MB'], warnings };
+  }
+
+  const workDir = await extractZipSafe(buffer);
+  try {
+    for (const file of REQUIRED_FILES) {
+      if (!fs.existsSync(path.join(workDir, file))) {
+        errors.push(`Thiếu file bắt buộc: ${file}`);
+      }
+    }
+
+    let manifest: ExamPackageManifest | undefined;
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(workDir, 'manifest.json'), 'utf8')) as ExamPackageManifest;
+      if (manifest.formatVersion !== EXAM_PACKAGE_FORMAT_VERSION && manifest.formatVersion !== '1') {
+        errors.push(`formatVersion không hỗ trợ: ${manifest.formatVersion}`);
+      }
+      if (!manifest.packageId) errors.push('manifest.packageId thiếu');
+    } catch {
+      errors.push('manifest.json không hợp lệ');
+    }
+
+    if (!fs.existsSync(path.join(workDir, 'papers'))) {
+      warnings.push('Thiếu thư mục papers/');
+    }
+
+    if (
+      !fs.existsSync(path.join(workDir, 'students.json')) &&
+      !fs.existsSync(path.join(workDir, 'kythi-master.xlsx'))
+    ) {
+      warnings.push('Không có students.json hoặc kythi-master.xlsx');
+    }
+
+    const isSingleSubject = manifest?.exportScope === 'single_subject';
+    const requiredPaperCodes =
+      isSingleSubject && manifest?.subjectCode ? [manifest.subjectCode] : ['LITERATURE', 'MATH'];
+
+    for (const code of requiredPaperCodes) {
+      const paperPath = path.join(workDir, 'papers', `${code}.json`);
+      if (!fs.existsSync(paperPath)) {
+        errors.push(
+          isSingleSubject
+            ? `Thiếu papers/${code}.json (môn trong gói)`
+            : `Thiếu papers/${code}.json (môn bắt buộc)`,
+        );
+      } else {
+        try {
+          const paper = JSON.parse(fs.readFileSync(paperPath, 'utf8')) as ExamPackagePaperRow;
+          if (!paper.questions?.length) errors.push(`papers/${code}.json không có câu hỏi`);
+        } catch {
+          errors.push(`papers/${code}.json không hợp lệ`);
+        }
+      }
+    }
+
+    let clusters: ExamPackageClusterRow[] = [];
+    const clustersPath = path.join(workDir, 'clusters.json');
+    if (fs.existsSync(clustersPath)) {
+      try {
+        clusters = JSON.parse(fs.readFileSync(clustersPath, 'utf8')) as ExamPackageClusterRow[];
+      } catch {
+        warnings.push('clusters.json không hợp lệ');
+      }
+    }
+
+    const papersDir = path.join(workDir, 'papers');
+    const subjectCodes: string[] = [];
+    if (fs.existsSync(papersDir)) {
+      for (const f of fs.readdirSync(papersDir).filter((x) => x.endsWith('.json'))) {
+        subjectCodes.push(f.replace('.json', ''));
+      }
+    }
+    const papers: Record<string, ExamPackagePaperRow> = {};
+    for (const code of subjectCodes) {
+      try {
+        papers[code] = JSON.parse(
+          fs.readFileSync(path.join(papersDir, `${code}.json`), 'utf8'),
+        ) as ExamPackagePaperRow;
+      } catch {
+        errors.push(`papers/${code}.json không hợp lệ`);
+      }
+    }
+    const blueprint = validateAllSubjectBlueprints(
+      papers,
+      subjectCodes,
+      clusters,
+      manifest?.mediaManifest,
+    );
+    errors.push(...blueprint.errors);
+    warnings.push(...blueprint.warnings);
+
+    return { valid: errors.length === 0, manifest, errors, warnings };
+  } finally {
+    const parent = path.dirname(workDir);
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+}
+
+export async function dryRunZip(buffer: Buffer): Promise<{
+  passed: boolean;
+  checklist: Array<{ item: string; ok: boolean; detail?: string }>;
+}> {
+  const validation = await validateZip(buffer);
+  const checklist: Array<{ item: string; ok: boolean; detail?: string }> = [
+    { item: 'ZIP hợp lệ', ok: validation.valid, detail: validation.errors.join('; ') || undefined },
+  ];
+
+  const workDir = await extractZipSafe(buffer);
+  try {
+    const papersDir = path.join(workDir, 'papers');
+    let clusters: ExamPackageClusterRow[] = [];
+    const clustersPath = path.join(workDir, 'clusters.json');
+    if (fs.existsSync(clustersPath)) {
+      try {
+        clusters = JSON.parse(fs.readFileSync(clustersPath, 'utf8')) as ExamPackageClusterRow[];
+      } catch {
+        /* ignore */
+      }
+    }
+    if (fs.existsSync(papersDir)) {
+      for (const f of fs.readdirSync(papersDir).filter((x) => x.endsWith('.json'))) {
+        const code = f.replace('.json', '');
+        const paper = JSON.parse(fs.readFileSync(path.join(papersDir, f), 'utf8')) as ExamPackagePaperRow;
+        checklist.push({
+          item: `Đề ${f}`,
+          ok: (paper.questions?.length ?? 0) > 0,
+          detail: `${paper.questions?.length ?? 0} câu`,
+        });
+        const bp = validateAllSubjectBlueprints({ [code]: paper }, [code], clusters);
+        checklist.push({
+          item: `Blueprint ${code}`,
+          ok: bp.valid,
+          detail: bp.errors[0] ?? 'OK',
+        });
+      }
+    }
+    const hasStudents =
+      fs.existsSync(path.join(workDir, 'students.json')) ||
+      fs.existsSync(path.join(workDir, 'kythi-master.xlsx'));
+    checklist.push({ item: 'Danh sách thí sinh', ok: hasStudents });
+
+    const studentsPath = path.join(workDir, 'students.json');
+    if (fs.existsSync(studentsPath)) {
+      const students = JSON.parse(fs.readFileSync(studentsPath, 'utf8')) as ExamPackageStudentRow[];
+      const allCred = students.every((s) => s.sbd?.trim() && s.pin?.trim());
+      checklist.push({
+        item: 'SBD/PIN trong gói',
+        ok: allCred,
+        detail: allCred ? `${students.length} thí sinh` : 'Thiếu SBD/PIN',
+      });
+    }
+  } finally {
+    const parent = path.dirname(workDir);
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+
+  return { passed: checklist.every((c) => c.ok), checklist };
+}
+
+export async function buildTemplateZip(): Promise<Buffer> {
+  const packageId = randomUUID();
+  const now = new Date().toISOString();
+  const manifest: ExamPackageManifest = {
+    formatVersion: EXAM_PACKAGE_FORMAT_VERSION,
+    packageId,
+    examName: 'Thi thử TN THPT 2025 (mẫu)',
+    createdAt: now,
+    mediaManifest: [],
+  };
+
+  const session: ExamPackageSessionConfig = {
+    name: manifest.examName,
+    routingMode: RoutingMode.FIXED_COMBO,
+    status: 'active',
+    durationMin: 90,
+    startAt: now,
+    rules: defaultExamRules(),
+  };
+
+  const subjects: ExamPackageSubjectRow[] = TN_THPT_SUBJECTS.map((s, idx) => ({
+    code: s.code,
+    nameVi: s.nameVi,
+    examDate: new Date().toISOString().slice(0, 10),
+    startTime: `${String(7 + idx * 2).padStart(2, '0')}:30`,
+    endTime: `${String(9 + idx * 2).padStart(2, '0')}:00`,
+    durationMin: s.durationMin,
+    structureMode: 'default',
+    ui_mode: s.uiMode,
+  }));
+
+  const papers: Record<string, ExamPackagePaperRow> = {};
+  for (const s of TN_THPT_SUBJECTS) {
+    papers[s.code] = { ...BLUEPRINT_FIXTURES[s.code], title: `Đề ${s.nameVi} mẫu` };
+  }
+
+  const clusters = buildValidEnglishClusters();
+
+  const students: ExamPackageStudentRow[] = [
+    {
+      fullName: 'Nguyễn Văn A',
+      studentCode: 'HS001',
+      className: '12A1',
+      subjects: ['LITERATURE', 'MATH', 'PHYSICS', 'CHEMISTRY'],
+      sbd: '1001',
+      pin: '12345678',
+    },
+  ];
+
+  return packState({
+    manifest,
+    session,
+    subjects,
+    students,
+    clusters,
+    papers,
+    credentialsAssignedAt: now,
+    credentialsPrintedAt: now,
+  });
+}
+
+export async function exportFromState(state: ExamPackageExportState): Promise<Buffer> {
+  return packState(state);
+}

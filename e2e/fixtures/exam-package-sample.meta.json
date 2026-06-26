@@ -1,0 +1,5 @@
+{
+  "note": "Chạy dry-run E2E với ZIP xuất từ Composer (môn MATH). Đặt file tại e2e/fixtures/exam-package-sample.zip",
+  "composerExport": "POST /api/composer/packages/export-by-subject { subjectCode: \"MATH\" }",
+  "composerRoot": "C:\\Users\\Administrator\\Downloads\\vnu-composer"
+}

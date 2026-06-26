@@ -1,0 +1,705 @@
+import {
+  Injectable,
+  BadRequestException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { createHash } from 'crypto';
+import * as bcrypt from 'bcrypt';
+import {
+  EXAM_PACKAGE_FORMAT_VERSION,
+  ExamType,
+  TN_THPT_SUBJECTS,
+  ExamPackageExportState,
+  ExamPackageImportResult,
+  ExamPackageSessionConfig,
+  ExamPackageSubjectRow,
+  ExamPackageStudentRow,
+  ExamPackagePaperRow,
+  ExamPackageClusterRow,
+  ExamPackageCredentialRow,
+} from '@vnu/shared-types';
+import {
+  validateZip as kitValidateZip,
+  dryRunZip,
+  validateExportState as kitValidateExportState,
+  extractZipSafe,
+  MAX_ZIP_BYTES,
+} from '@vnu/exam-package-kit';
+import { ExamSession } from '../../database/entities/exam-session.entity';
+import { ExamPaper } from '../../database/entities/exam-paper.entity';
+import { QuestionBank } from '../../database/entities/question-bank.entity';
+import { QuestionCluster } from '../../database/entities/question-cluster.entity';
+import { MediaAsset } from '../../database/entities/media-asset.entity';
+import { Student } from '../../database/entities/student.entity';
+import { Class } from '../../database/entities/class.entity';
+import { School } from '../../database/entities/school.entity';
+import { StudentSubjectSlot } from '../../database/entities/student-subject-slot.entity';
+import { StudentSession } from '../../database/entities/student-session.entity';
+import { ExamMasterService } from '../exam-master/exam-master.service';
+
+const REQUIRED_FILES = ['manifest.json', 'session.json', 'subjects.json'];
+
+@Injectable()
+export class ExamPackageService {
+  private uploadDir = process.env.UPLOAD_DIR || './uploads';
+
+  constructor(
+    @InjectRepository(ExamSession)
+    private readonly sessionRepo: Repository<ExamSession>,
+    @InjectRepository(ExamPaper)
+    private readonly paperRepo: Repository<ExamPaper>,
+    @InjectRepository(QuestionBank)
+    private readonly questionRepo: Repository<QuestionBank>,
+    @InjectRepository(QuestionCluster)
+    private readonly clusterRepo: Repository<QuestionCluster>,
+    @InjectRepository(MediaAsset)
+    private readonly mediaRepo: Repository<MediaAsset>,
+    @InjectRepository(Student)
+    private readonly studentRepo: Repository<Student>,
+    @InjectRepository(Class)
+    private readonly classRepo: Repository<Class>,
+    @InjectRepository(School)
+    private readonly schoolRepo: Repository<School>,
+    @InjectRepository(StudentSubjectSlot)
+    private readonly slotRepo: Repository<StudentSubjectSlot>,
+    private readonly examMaster: ExamMasterService,
+    private readonly dataSource: DataSource,
+  ) {
+    if (!fs.existsSync(this.uploadDir)) {
+      fs.mkdirSync(this.uploadDir, { recursive: true });
+    }
+  }
+
+  async buildTemplateZip(): Promise<Buffer> {
+    const { buildTemplateZip } = await import('@vnu/exam-package-kit');
+    return buildTemplateZip();
+  }
+
+  async exportFromState(state: ExamPackageExportState): Promise<Buffer> {
+    const { exportFromState } = await import('@vnu/exam-package-kit');
+    return exportFromState(state);
+  }
+
+  validateExportState(state: ExamPackageExportState) {
+    return kitValidateExportState(state);
+  }
+
+  async dryRun(buffer: Buffer) {
+    return dryRunZip(buffer);
+  }
+
+  async validateZip(buffer: Buffer) {
+    return kitValidateZip(buffer);
+  }
+
+  async importZip(buffer: Buffer): Promise<ExamPackageImportResult> {
+    if (buffer.length > MAX_ZIP_BYTES) {
+      throw new BadRequestException('File ZIP vượt quá 100MB');
+    }
+
+    const validation = await this.validateZip(buffer);
+    if (!validation.valid || !validation.manifest) {
+      throw new BadRequestException(validation.errors.join('; ') || 'ZIP không hợp lệ');
+    }
+
+    const workDir = await extractZipSafe(buffer);
+    const manifest = validation.manifest;
+
+    try {
+      const existing = await this.sessionRepo.findOne({ where: { packageId: manifest.packageId } });
+      if (existing?.status === 'closed') {
+        throw new BadRequestException('Ca thi đã đóng — không thể import ghi đè');
+      }
+
+      const sessionConfig = JSON.parse(
+        fs.readFileSync(path.join(workDir, 'session.json'), 'utf8'),
+      ) as ExamPackageSessionConfig;
+      const subjects = JSON.parse(
+        fs.readFileSync(path.join(workDir, 'subjects.json'), 'utf8'),
+      ) as ExamPackageSubjectRow[];
+
+      const isPartialImport = manifest.exportScope === 'single_subject';
+
+      if (existing) {
+        sessionConfig.rules = this.mergeSubjectsIntoRules(existing.rules, subjects);
+      } else {
+        sessionConfig.rules = this.mergeSubjectsIntoRules(sessionConfig.rules, subjects);
+      }
+
+      let studentsCreated = 0;
+      let studentsUpdated = 0;
+      let slotsCreated = 0;
+      let slotsUpdated = 0;
+      let slotsRemoved = 0;
+      let papersCreated = 0;
+      let papersUpdated = 0;
+      let mediaImported = 0;
+      const errors: ExamPackageImportResult['errors'] = [];
+      let examSessionId = existing?.id ?? '';
+
+      await this.dataSource.transaction(async (manager) => {
+        const sessionRepo = manager.getRepository(ExamSession);
+        const paperRepo = manager.getRepository(ExamPaper);
+        const clusterRepo = manager.getRepository(QuestionCluster);
+        const questionRepo = manager.getRepository(QuestionBank);
+        const mediaRepo = manager.getRepository(MediaAsset);
+
+        const pathMap = await this.importMediaFromDir(workDir, mediaRepo);
+        mediaImported = pathMap.size;
+
+        if (existing) {
+          await sessionRepo.update(existing.id, {
+            name: sessionConfig.name,
+            routingMode: sessionConfig.routingMode,
+            status: 'active',
+            durationMin: sessionConfig.durationMin ?? existing.durationMin,
+            startAt: sessionConfig.startAt ? new Date(sessionConfig.startAt) : existing.startAt,
+            rules: sessionConfig.rules as never,
+            packageId: manifest.packageId,
+          });
+          examSessionId = existing.id;
+        } else {
+          const created = await sessionRepo.save(
+            sessionRepo.create({
+              name: sessionConfig.name,
+              routingMode: sessionConfig.routingMode as never,
+              status: 'active',
+              durationMin: sessionConfig.durationMin ?? 90,
+              startAt: sessionConfig.startAt ? new Date(sessionConfig.startAt) : new Date(),
+              rules: sessionConfig.rules as never,
+              routingConfig: { mode: sessionConfig.routingMode, resolve_order: ['combo_code'] } as never,
+              packageId: manifest.packageId,
+            }),
+          );
+          examSessionId = created.id;
+        }
+
+        if (fs.existsSync(path.join(workDir, 'clusters.json'))) {
+          const clusters = JSON.parse(
+            fs.readFileSync(path.join(workDir, 'clusters.json'), 'utf8'),
+          ) as ExamPackageClusterRow[];
+          const clusterSubjects = [...new Set(clusters.map((c) => c.subject))];
+          if (isPartialImport && clusterSubjects.length) {
+            for (const subj of clusterSubjects) {
+              await clusterRepo.delete({ subject: subj });
+            }
+          }
+          for (const c of clusters) {
+            await clusterRepo.save(
+              clusterRepo.create({
+                subject: c.subject,
+                clusterSubtype: c.clusterSubtype,
+                passage: this.rewriteMediaPaths(c.passage, pathMap),
+                questionIds: c.questionIds,
+                difficulty: c.difficulty as never,
+              }),
+            );
+          }
+        }
+
+        const papersDir = path.join(workDir, 'papers');
+        if (fs.existsSync(papersDir)) {
+          for (const file of fs.readdirSync(papersDir).filter((f) => f.endsWith('.json'))) {
+            const paperData = JSON.parse(
+              fs.readFileSync(path.join(papersDir, file), 'utf8'),
+            ) as ExamPackagePaperRow;
+            paperData.questions = paperData.questions.map((q) =>
+              this.rewriteMediaPaths(q, pathMap),
+            ) as Record<string, unknown>[];
+
+            const subject = paperData.subject || path.basename(file, '.json');
+            let paper = await paperRepo.findOne({ where: { examSessionId, subject } });
+            if (paper) {
+              await paperRepo.update(paper.id, {
+                title: paperData.title,
+                questions: paperData.questions as never,
+                difficultyMeta: (paperData.difficultyMeta ?? {}) as never,
+              });
+              papersUpdated++;
+            } else {
+              await paperRepo.save(
+                paperRepo.create({
+                  title: paperData.title,
+                  subject,
+                  comboCode: paperData.comboCode,
+                  examSessionId,
+                  questions: paperData.questions,
+                  difficultyMeta: paperData.difficultyMeta ?? {},
+                }),
+              );
+              papersCreated++;
+            }
+          }
+        }
+
+        const xlsxPath = path.join(workDir, 'kythi-master.xlsx');
+        if (fs.existsSync(xlsxPath)) {
+          const xlsxBuf = fs.readFileSync(xlsxPath);
+          const masterResult = await this.examMaster.importFromBuffer(examSessionId, xlsxBuf);
+          if (masterResult.errors.length > 0) {
+            throw new BadRequestException(
+              masterResult.errors.map((e) => `Excel dòng ${e.row}: ${e.message}`).join('; '),
+            );
+          }
+          studentsCreated += masterResult.students.created;
+          studentsUpdated += masterResult.students.updated;
+          slotsCreated += masterResult.slots.created;
+          slotsUpdated += masterResult.slots.updated;
+          slotsRemoved += masterResult.slots.removed;
+        } else if (fs.existsSync(path.join(workDir, 'students.json'))) {
+          const studentRows = JSON.parse(
+            fs.readFileSync(path.join(workDir, 'students.json'), 'utf8'),
+          ) as ExamPackageStudentRow[];
+          const credPath = path.join(workDir, 'credentials.json');
+          const hasCredentials = fs.existsSync(credPath);
+          const slotStats = await this.importStudentsJson(
+            manager,
+            examSessionId,
+            studentRows,
+            subjects,
+            hasCredentials,
+            isPartialImport,
+          );
+          studentsCreated += slotStats.studentsCreated;
+          studentsUpdated += slotStats.studentsUpdated;
+          slotsCreated += slotStats.slotsCreated;
+          slotsUpdated += slotStats.slotsUpdated;
+          slotsRemoved += slotStats.slotsRemoved;
+
+          if (hasCredentials) {
+            const credentials = JSON.parse(
+              fs.readFileSync(credPath, 'utf8'),
+            ) as ExamPackageCredentialRow[];
+            await this.importCredentialsJson(manager, examSessionId, credentials);
+          }
+        }
+
+        if (manifest.branding?.logoPath) {
+          const logoSrc = path.join(workDir, manifest.branding.logoPath);
+          if (fs.existsSync(logoSrc)) {
+            const brandingDirs = [
+              path.resolve(__dirname, '../../../../web/student/public/branding'),
+              path.resolve(__dirname, '../../../../web/proctor/public/branding'),
+            ];
+            for (const dir of brandingDirs) {
+              fs.mkdirSync(dir, { recursive: true });
+              fs.copyFileSync(logoSrc, path.join(dir, 'logo.png'));
+            }
+          }
+        }
+      });
+
+      const sessionAfter = await this.sessionRepo.findOne({ where: { id: examSessionId } });
+      const paperRows = await this.paperRepo.find({ where: { examSessionId } });
+      const slotRows = await this.slotRepo.find({ where: { examSessionId } });
+      const importedSubjects = [...new Set(paperRows.map((p) => p.subject))];
+      const scheduledCodes = new Set<string>();
+      for (const s of subjects) scheduledCodes.add(s.code);
+      for (const r of (sessionAfter?.rules?.subjects ?? []) as { code: string }[]) {
+        scheduledCodes.add(r.code);
+      }
+      const pendingSubjects = [...scheduledCodes].filter((code) => !importedSubjects.includes(code));
+
+      return {
+        examSessionId,
+        packageId: manifest.packageId,
+        exportScope: manifest.exportScope,
+        subjectCode: manifest.subjectCode,
+        importedSubjects,
+        pendingSubjects,
+        students: { created: studentsCreated, updated: studentsUpdated },
+        slots: { created: slotsCreated, updated: slotsUpdated, removed: slotsRemoved },
+        papers: { created: papersCreated, updated: papersUpdated },
+        media: { imported: mediaImported },
+        sessionUpdated: true,
+        errors,
+      };
+    } finally {
+      fs.rmSync(path.dirname(workDir), { recursive: true, force: true });
+    }
+  }
+
+  async getImportStatus(examSessionId: string) {
+    const session = await this.sessionRepo.findOne({ where: { id: examSessionId } });
+    if (!session) {
+      throw new BadRequestException('Ca thi không tồn tại');
+    }
+    const papers = await this.paperRepo.find({ where: { examSessionId } });
+    const slots = await this.slotRepo.find({ where: { examSessionId } });
+    const ruleSubjects = (session.rules?.subjects ?? []) as Array<{ code: string }>;
+    const codes = new Set<string>(ruleSubjects.map((s) => s.code));
+    for (const slot of slots) codes.add(slot.subjectCode);
+
+    const subjects = [...codes].map((code) => {
+      const meta = TN_THPT_SUBJECTS.find((s) => s.code === code);
+      const subjectSlots = slots.filter((s) => s.subjectCode === code);
+      const earliest = subjectSlots.reduce<Date | null>((min, s) => {
+        const t = s.scheduledStart;
+        return !min || t < min ? t : min;
+      }, null);
+      return {
+        code,
+        nameVi: meta?.nameVi ?? code,
+        scheduledStart: earliest?.toISOString() ?? null,
+        hasPaper: papers.some((p) => p.subject === code),
+        hasCredentials: subjectSlots.length > 0,
+      };
+    });
+
+    const importedSubjects = subjects.filter((s) => s.hasPaper).map((s) => s.code);
+    const pendingSubjects = subjects.filter((s) => !s.hasPaper).map((s) => s.code);
+
+    return {
+      packageId: session.packageId,
+      examSessionId,
+      importedSubjects,
+      pendingSubjects,
+      subjects,
+    };
+  }
+
+  async getPackageStatus(): Promise<{ examSessionId: string | null; sessionName: string | null; packageId: string | null }> {
+    const session = await this.sessionRepo.findOne({
+      where: { status: 'active' },
+      order: { updatedAt: 'DESC' },
+    });
+    if (!session) {
+      return { examSessionId: null, sessionName: null, packageId: null };
+    }
+    return {
+      examSessionId: session.id,
+      sessionName: session.name,
+      packageId: session.packageId,
+    };
+  }
+
+  private async importMediaFromDir(
+    workDir: string,
+    mediaRepo: Repository<MediaAsset>,
+  ): Promise<Map<string, string>> {
+    const pathMap = new Map<string, string>();
+    const mediaRoot = path.join(workDir, 'media');
+    if (!fs.existsSync(mediaRoot)) return pathMap;
+
+    const walk = async (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else {
+          const rel = path.relative(workDir, full).replace(/\\/g, '/');
+          const buf = fs.readFileSync(full);
+          const checksum = createHash('sha256').update(buf).digest('hex');
+          const filename = `${Date.now()}-${path.basename(full)}`;
+          const dest = path.join(this.uploadDir, filename);
+          fs.writeFileSync(dest, buf);
+          const storedPath = `/uploads/${filename}`;
+          pathMap.set(rel, storedPath);
+          pathMap.set(`media/${path.relative(mediaRoot, full).replace(/\\/g, '/')}`, storedPath);
+          await mediaRepo.save(
+            mediaRepo.create({
+              filename,
+              path: storedPath,
+              mimeType: this.guessMime(full),
+              checksum,
+              encrypted: false,
+            }),
+          );
+        }
+      }
+    };
+    await walk(mediaRoot);
+    return pathMap;
+  }
+
+  private rewriteMediaPaths<T>(obj: T, pathMap: Map<string, string>): T {
+    if (!obj || pathMap.size === 0) return obj;
+    const json = JSON.stringify(obj);
+    let out = json;
+    pathMap.forEach((newPath, oldPath) => {
+      out = out.split(oldPath).join(newPath);
+      out = out.split(`[Ảnh: ${oldPath}]`).join(`[Ảnh: ${newPath}]`);
+    });
+    return JSON.parse(out) as T;
+  }
+
+  private async importStudentsJson(
+    manager: typeof this.dataSource.manager,
+    examSessionId: string,
+    rows: ExamPackageStudentRow[],
+    subjects: ExamPackageSubjectRow[],
+    skipSessionCreation = false,
+    partialImport = false,
+  ) {
+    const studentRepo = manager.getRepository(Student);
+    const classRepo = manager.getRepository(Class);
+    const slotRepo = manager.getRepository(StudentSubjectSlot);
+    const sessionRepo = manager.getRepository(StudentSession);
+    const school = await this.resolveSchool();
+
+    const scheduleMap = new Map(subjects.map((s) => [s.code, s]));
+    const importedSubjectCodes = new Set(subjects.map((s) => s.code));
+    let studentsCreated = 0;
+    let studentsUpdated = 0;
+    let slotsCreated = 0;
+    let slotsUpdated = 0;
+    let slotsRemoved = 0;
+
+    for (const row of rows) {
+      if (!partialImport && (!row.subjects.includes('LITERATURE') || !row.subjects.includes('MATH'))) {
+        throw new BadRequestException(`HS ${row.studentCode}: thiếu Văn hoặc Toán`);
+      }
+
+      let classId: string | undefined;
+      if (row.className) {
+        const cls = await this.findOrCreateClass(row.className, school.id, classRepo);
+        classId = cls.id;
+      }
+
+      let student = await studentRepo.findOne({ where: { studentCode: row.studentCode } });
+      if (student) {
+        await studentRepo.update(student.id, {
+          fullName: row.fullName,
+          classId: classId ?? student.classId,
+          schoolId: school.id,
+          labRoom: row.labRoom?.trim() || student.labRoom,
+        });
+        studentsUpdated++;
+      } else {
+        student = await studentRepo.save(
+          studentRepo.create({
+            fullName: row.fullName,
+            studentCode: row.studentCode,
+            classId,
+            schoolId: school.id,
+            labRoom: row.labRoom?.trim() || null,
+          }),
+        );
+        studentsCreated++;
+      }
+
+      const existingSlots = await slotRepo.find({ where: { studentId: student.id, examSessionId } });
+      const bySubject = new Map(existingSlots.map((s) => [s.subjectCode, s]));
+
+      for (const code of row.subjects) {
+        const sched = scheduleMap.get(code);
+        if (!sched) continue;
+        const start = this.combineDateTime(sched.examDate, sched.startTime);
+        const end = this.combineDateTime(sched.examDate, sched.endTime);
+        const existing = bySubject.get(code);
+        if (existing) {
+          if (existing.status !== 'completed') {
+            await slotRepo.update(existing.id, { scheduledStart: start, scheduledEnd: end });
+            slotsUpdated++;
+          }
+          bySubject.delete(code);
+        } else {
+          await slotRepo.save(
+            slotRepo.create({
+              studentId: student.id,
+              examSessionId,
+              subjectCode: code,
+              scheduledStart: start,
+              scheduledEnd: end,
+              status: 'scheduled',
+            }),
+          );
+          slotsCreated++;
+        }
+      }
+
+      for (const [code, orphan] of bySubject) {
+        if (partialImport && !importedSubjectCodes.has(code)) continue;
+        if (orphan.status !== 'completed') {
+          await slotRepo.delete(orphan.id);
+          slotsRemoved++;
+        }
+      }
+
+      if (!skipSessionCreation && row.sbd?.trim() && row.pin?.trim()) {
+        const pinHash = await bcrypt.hash(row.pin.trim(), 10);
+        const existingSession = await sessionRepo.findOne({
+          where: { examSessionId, studentId: student.id },
+        });
+        if (existingSession) {
+          await sessionRepo.update(existingSession.id, {
+            sbd: row.sbd.trim(),
+            pinHash,
+          });
+        } else {
+          await sessionRepo.save(
+            sessionRepo.create({
+              sbd: row.sbd.trim(),
+              pinHash,
+              studentId: student.id,
+              examSessionId,
+              status: 'NOT_LOGGED_IN' as never,
+            }),
+          );
+        }
+      } else if (!skipSessionCreation) {
+        throw new BadRequestException(
+          `HS ${row.fullName}: thiếu SBD/PIN trong gói — xếp & in phiếu tại Composer trước khi xuất ZIP`,
+        );
+      }
+    }
+
+    return { studentsCreated, studentsUpdated, slotsCreated, slotsUpdated, slotsRemoved };
+  }
+
+  private async importCredentialsJson(
+    manager: typeof this.dataSource.manager,
+    examSessionId: string,
+    credentials: ExamPackageCredentialRow[],
+  ) {
+    const studentRepo = manager.getRepository(Student);
+    const sessionRepo = manager.getRepository(StudentSession);
+    const paperRepo = manager.getRepository(ExamPaper);
+
+    for (const cred of credentials) {
+      if (!cred.examAccount?.trim() || !cred.pin?.trim() || !cred.sbd?.trim()) {
+        throw new BadRequestException(`Credential thiếu tài khoản/PIN/SBD: ${cred.fullName}`);
+      }
+      const account = cred.examAccount.trim();
+      if (!/^\d{6}$/.test(account)) {
+        throw new BadRequestException(`Tài khoản phải 6 chữ số: ${account} (${cred.fullName})`);
+      }
+      const pin = cred.pin.trim();
+      if (!/^\d{8}$/.test(pin)) {
+        throw new BadRequestException(`PIN phải 8 chữ số: ${cred.fullName} (${cred.subjectCode})`);
+      }
+      const student = await studentRepo.findOne({ where: { studentCode: cred.studentCode } });
+      if (!student) {
+        throw new BadRequestException(`Không tìm thấy HS ${cred.studentCode} cho credential ${cred.examAccount}`);
+      }
+      if (cred.labRoom?.trim()) {
+        await studentRepo.update(student.id, { labRoom: cred.labRoom.trim() });
+      }
+      const paper = await paperRepo.findOne({
+        where: { examSessionId, subject: cred.subjectCode },
+      });
+      if (!paper) {
+        throw new BadRequestException(`Thiếu đề môn ${cred.subjectCode} cho ${cred.examAccount}`);
+      }
+      const pinHash = await bcrypt.hash(cred.pin.trim(), 10);
+      const existing = await sessionRepo.findOne({ where: { examAccount: account } });
+      if (existing && existing.studentId && existing.studentId !== student.id) {
+        throw new BadRequestException(`Tài khoản ${account} đã được gán cho thí sinh khác`);
+      }
+      const payload = {
+        sbd: cred.sbd.trim(),
+        pinHash,
+        studentId: student.id,
+        examSessionId,
+        subjectCode: cred.subjectCode,
+        examPaperId: paper.id,
+        examAccount: account,
+      };
+      if (existing) {
+        await sessionRepo.update(existing.id, payload);
+      } else {
+        await sessionRepo.save(
+          sessionRepo.create({
+            ...payload,
+            status: 'NOT_LOGGED_IN' as never,
+            sessionVersion: 1,
+          }),
+        );
+      }
+    }
+  }
+
+  private mergeSubjectsIntoRules(
+    rules: ExamPackageSessionConfig['rules'],
+    subjects: ExamPackageSubjectRow[],
+  ) {
+    const merged = { ...rules, exam_type: ExamType.TN_THPT_2025, subjects: [...(rules.subjects ?? [])] };
+    for (const s of subjects) {
+      const entry = {
+        code: s.code,
+        structureMode: s.structureMode,
+        ui_mode: s.ui_mode,
+        overrides: s.durationMin ? { durationMin: s.durationMin } : undefined,
+      };
+      const idx = merged.subjects.findIndex((x) => x.code === s.code);
+      if (idx >= 0) merged.subjects[idx] = { ...merged.subjects[idx], ...entry };
+      else merged.subjects.push(entry);
+    }
+    return merged;
+  }
+
+  private defaultRules() {
+    return {
+      exam_type: ExamType.TN_THPT_2025,
+      structure: { source: 'QD764' as const, is_custom: false },
+      cognitive_distribution: { nhan_biet: 0.4, thong_hieu: 0.3, van_dung: 0.3 },
+      subjects: TN_THPT_SUBJECTS.map((s) => ({
+        code: s.code,
+        structureMode: 'default' as const,
+        ui_mode: s.uiMode,
+      })),
+      scoring: {
+        true_false_branch: { '1': 0.1, '2': 0.25, '3': 0.5, '4': 1.0 },
+        short_answer_normalize: ['comma_to_dot', 'trim_whitespace'] as ('comma_to_dot' | 'trim_whitespace')[],
+      },
+      proctoring: {
+        max_focus_violations: 3,
+        autosave_interval_sec: 3,
+        release_mode: 'proctor_at_time',
+        grace_before_min: 5,
+        grace_after_min: 15,
+        require_fullscreen: true,
+        block_copy_paste: true,
+        block_context_menu: true,
+        watermark: true,
+        single_active_session: true,
+      },
+      audio: { max_plays: 2, seek_disabled: true },
+    };
+  }
+
+  private async resolveSchool(): Promise<School> {
+    let school = await this.schoolRepo.findOne({ where: {}, order: { createdAt: 'ASC' } });
+    if (!school) {
+      school = await this.schoolRepo.save(
+        this.schoolRepo.create({ name: 'THPT Demo VNU', code: 'VNU001' }),
+      );
+    }
+    return school;
+  }
+
+  private async findOrCreateClass(name: string, schoolId: string, classRepo: Repository<Class>) {
+    let cls = await classRepo.findOne({ where: { name, schoolId } });
+    if (!cls) {
+      const gradeMatch = name.match(/^(\d+)/);
+      cls = await classRepo.save(
+        classRepo.create({ name, schoolId, grade: gradeMatch?.[1] }),
+      );
+    }
+    return cls;
+  }
+
+  private combineDateTime(dateStr: string, time: string): Date {
+    const [h, m] = time.split(':').map(Number);
+    const d = new Date(dateStr);
+    d.setHours(h || 0, m || 0, 0, 0);
+    return d;
+  }
+
+  private guessMime(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const map: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+    };
+    return map[ext] ?? 'application/octet-stream';
+  }
+}

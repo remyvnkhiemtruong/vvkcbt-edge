@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+uploads/
+backups/
+*.log
+.DS_Store
+coverage/
+.turbo/
+dev-credentials.json
+apps/web/student/public/dev-credentials.json

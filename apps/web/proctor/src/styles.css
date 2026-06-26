@@ -1,0 +1,60 @@
+.proctor-toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.proctor-ws {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.proctor-ws.on {
+  color: #4ade80;
+}
+
+.proctor-ws.off {
+  color: #f87171;
+}
+
+.proctor-alerts {
+  margin-bottom: 1rem;
+}
+
+.proctor-alert {
+  background: var(--cbt-warning-bg);
+  border: 1px solid var(--cbt-warning-border);
+  color: #92400e;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--cbt-radius-sm);
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.proctor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.proctor-actions-panel {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--cbt-radius-sm);
+  color: #e2e8f0;
+}
+
+.proctor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.proctor-actions .cbt-btn {
+  font-size: 0.8rem;
+  padding: 0.5rem 0.85rem;
+}
