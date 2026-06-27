@@ -1,8 +1,6 @@
 /** Gap markers for English fill subtypes */
 export const GAP_MARKER_RE = /(\{\{\d+\}\}|___+)/g;
 
-const FENCED_CODE_RE = /(```(\w+)?\n?([\s\S]*?)```)/g;
-
 export type PassageSegment =
   | { kind: 'text'; value: string }
   | { kind: 'gap'; value: string; gapIndex: number };
@@ -13,18 +11,13 @@ export type PassageSegment =
 export function splitPassageGaps(text: string): PassageSegment[] {
   const segments: PassageSegment[] = [];
   let gapIndex = 0;
-  const parts = text.split(FENCED_CODE_RE);
+  const fenceRe = /```(\w+)?\n?([\s\S]*?)```/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part) continue;
-
-    if (part.startsWith('```')) {
-      segments.push({ kind: 'text', value: part });
-      continue;
-    }
-
-    const subparts = part.split(GAP_MARKER_RE);
+  const pushTextWithGaps = (chunk: string) => {
+    if (!chunk) return;
+    const subparts = chunk.split(GAP_MARKER_RE);
     for (const sp of subparts) {
       if (!sp) continue;
       if (/^\{\{\d+\}\}$|___+/.test(sp)) {
@@ -33,7 +26,14 @@ export function splitPassageGaps(text: string): PassageSegment[] {
         segments.push({ kind: 'text', value: sp });
       }
     }
+  };
+
+  while ((match = fenceRe.exec(text)) !== null) {
+    pushTextWithGaps(text.slice(last, match.index));
+    segments.push({ kind: 'text', value: match[0] });
+    last = match.index + match[0].length;
   }
+  pushTextWithGaps(text.slice(last));
 
   return segments;
 }

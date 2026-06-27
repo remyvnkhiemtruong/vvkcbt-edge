@@ -21,7 +21,7 @@
     "migration:run": "npm run migration:run -w @vnu/api",
     "migration:generate": "npm run migration:generate -w @vnu/api",
     "seed": "npm run seed -w @vnu/api",
-    "test": "npm run test -w @vnu/shared-types && npm run test -w @vnu/exam-package-kit && npm run test -w @vnu/api",
+    "test": "npm run test -w @vnu/shared-types && npm run test -w @vnu/exam-package-kit && npm run test -w @vnu/web-shared && npm run test -w @vnu/api",
     "test:zip-roundtrip": "npm run test:zip-roundtrip -w @vnu/api",
     "test:e2e": "playwright test",
     "preflight": "node scripts/preflight-day-g.mjs",

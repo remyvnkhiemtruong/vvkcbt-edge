@@ -5,10 +5,16 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const edgeRoot = path.resolve(__dirname, '..');
-const composerRoot = path.resolve(edgeRoot, '..', 'vnu-composer');
+const composerCandidates = [
+  process.env.COMPOSER_ROOT,
+  path.join(edgeRoot, 'vnu-composer'),
+  path.resolve(edgeRoot, '..', 'vnu-composer'),
+].filter(Boolean);
+const composerRoot = composerCandidates.find((p) => existsSync(p)) ?? composerCandidates[composerCandidates.length - 1];
 
 /** [edgeRelative, composerRelative] — exact hash match */
 const exactPairs = [
+  ['apps/web/shared/src/i18n/brand.ts', 'packages/web-shared/src/i18n/brand.ts'],
   ['packages/shared-types/src/blueprint-validator.ts', 'packages/shared-types/src/blueprint-validator.ts'],
   ['packages/shared-types/src/exam-package.ts', 'packages/shared-types/src/exam-package.ts'],
   ['packages/shared-types/src/question-order.ts', 'packages/shared-types/src/question-order.ts'],

@@ -29,6 +29,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout vnu-composer (kit sync)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/vnu-composer
+          path: vnu-composer
+          ref: ${{ github.ref_name }}
+        continue-on-error: true
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -36,6 +45,8 @@ jobs:
 
       - run: npm ci
       - run: npm run test -w @vnu/shared-types
+      - run: npm run test -w @vnu/exam-package-kit
+      - run: npm run test -w @vnu/web-shared
       - run: npm run build
         env:
           DATABASE_URL: postgresql://vnu:vnu_secret@localhost:5432/vnu_exam
@@ -58,7 +69,8 @@ jobs:
 
       - name: Kit sync check
         run: npm run kit-sync-check
-        continue-on-error: true
+        env:
+          COMPOSER_ROOT: ${{ github.workspace }}/vnu-composer
 
   composer-kit-smoke:
     runs-on: ubuntu-latest

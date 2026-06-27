@@ -12,8 +12,22 @@ export type TnThptSubjectCode =
   | 'GEOGRAPHY'
   | 'HISTORY'
   | 'CIVIC_EDU'
-  | 'TECHNOLOGY'
+  | 'TECH_INDUSTRY'
+  | 'TECH_AGRICULTURE'
   | 'INFORMATICS';
+
+/** Mã môn công nghệ — thí sinh đăng ký một trong hai. */
+export const TECH_SUBJECT_CODES = ['TECH_INDUSTRY', 'TECH_AGRICULTURE'] as const;
+export type TechSubjectCode = (typeof TECH_SUBJECT_CODES)[number];
+
+export function isTechSubjectCode(code: string): boolean {
+  return (TECH_SUBJECT_CODES as readonly string[]).includes(code) || code === 'TECHNOLOGY';
+}
+
+/** Chuẩn hóa mã legacy `TECHNOLOGY` → `TECH_INDUSTRY`. */
+export function normalizeSubjectCode(code: string): string {
+  return code === 'TECHNOLOGY' ? 'TECH_INDUSTRY' : code;
+}
 
 export interface TnThptSubjectMeta {
   code: TnThptSubjectCode;
@@ -36,7 +50,22 @@ export const TN_THPT_SUBJECTS: TnThptSubjectMeta[] = [
   { code: 'GEOGRAPHY', nameVi: 'Địa lý', mandatory: false, durationMin: 50, uiMode: 'vertical_focus', templateCode: 'GEOGRAPHY_QD764' },
   { code: 'HISTORY', nameVi: 'Lịch sử', mandatory: false, durationMin: 50, uiMode: 'vertical_focus', templateCode: 'HISTORY_QD764' },
   { code: 'CIVIC_EDU', nameVi: 'GDKT&PL', mandatory: false, durationMin: 50, uiMode: 'vertical_focus', templateCode: 'CIVIC_EDU_QD764' },
-  { code: 'TECHNOLOGY', nameVi: 'Công nghệ', mandatory: false, durationMin: 50, uiMode: 'vertical_focus', templateCode: 'TECHNOLOGY_QD764' },
+  {
+    code: 'TECH_INDUSTRY',
+    nameVi: 'Công nghệ công nghiệp',
+    mandatory: false,
+    durationMin: 50,
+    uiMode: 'vertical_focus',
+    templateCode: 'TECH_INDUSTRY_QD764',
+  },
+  {
+    code: 'TECH_AGRICULTURE',
+    nameVi: 'Công nghệ nông nghiệp',
+    mandatory: false,
+    durationMin: 50,
+    uiMode: 'vertical_focus',
+    templateCode: 'TECH_AGRICULTURE_QD764',
+  },
   { code: 'INFORMATICS', nameVi: 'Tin học', mandatory: false, durationMin: 50, uiMode: 'vertical_focus', templateCode: 'INFORMATICS_QD764' },
 ];
 
@@ -145,8 +174,22 @@ export const QD764_DEFAULT_STRUCTURES: ExamStructureTemplate[] = [
     },
   },
   {
-    code: 'TECHNOLOGY_QD764',
-    subject: 'TECHNOLOGY',
+    code: 'TECH_INDUSTRY_QD764',
+    subject: 'TECH_INDUSTRY',
+    source: StructureSource.QD764,
+    isCustom: false,
+    durationMin: 50,
+    totalScore: 10,
+    uiMode: 'vertical_focus',
+    cognitiveDistribution: DEFAULT_COGNITIVE_DISTRIBUTION,
+    parts: {
+      part1_mcq: { count: 24, score_per_item: 0.25, type: 'mcq' },
+      part2_true_false: { count: 4, score_branch: TF_BRANCH, type: 'true_false' },
+    },
+  },
+  {
+    code: 'TECH_AGRICULTURE_QD764',
+    subject: 'TECH_AGRICULTURE',
     source: StructureSource.QD764,
     isCustom: false,
     durationMin: 50,
@@ -225,6 +268,7 @@ export function getDefaultStructureByCode(templateCode: string): ExamStructureTe
 }
 
 export function getSubjectNameVi(code: string): string {
+  if (code === 'TECHNOLOGY') return 'Công nghệ';
   return getSubjectMeta(code)?.nameVi ?? code;
 }
 
@@ -269,7 +313,7 @@ function resolvePartLabelMeta(
     return {
       title: 'Phần II — Trắc nghiệm Đúng/Sai',
       subtitle:
-        'Câu 1–2: chung. Chọn một nhánh: câu 3–4 (Khoa học máy tính) hoặc câu 5–6 (Tin học ứng dụng). Không được làm lẫn hai nhánh.',
+        'Mỗi câu tối đa 1 điểm (4 ý Đ/S). Câu 1–2: chung. Chọn một nhánh: câu 3–4 (KHMT) hoặc câu 5–6 (THUD). Làm lẫn hai nhánh (vd. 3+5, 4+6, hoặc cả 3–6) thì không chấm 4 câu tùy chọn.',
     };
   }
   if (STANDARD_PART_LABELS[partKey]) return STANDARD_PART_LABELS[partKey];
@@ -324,12 +368,12 @@ export const TNPT_36_COMBOS: Array<{
   { comboCode: 'C04', comboName: 'Sử, Địa, Tin', subjects: ['MATH', 'HISTORY', 'GEOGRAPHY', 'INFORMATICS'], admissionBlocks: ['C04'] },
   { comboCode: 'C05', comboName: 'Sử, GDKT&PL, Tin', subjects: ['MATH', 'HISTORY', 'CIVIC_EDU', 'INFORMATICS'], admissionBlocks: ['C05'] },
   { comboCode: 'C06', comboName: 'Địa, GDKT&PL, Tin', subjects: ['MATH', 'GEOGRAPHY', 'CIVIC_EDU', 'INFORMATICS'], admissionBlocks: ['C06'] },
-  { comboCode: 'C07', comboName: 'Sử, Địa, Công nghệ', subjects: ['MATH', 'HISTORY', 'GEOGRAPHY', 'TECHNOLOGY'], admissionBlocks: ['C07'] },
-  { comboCode: 'C08', comboName: 'Sử, GDKT&PL, CN', subjects: ['MATH', 'HISTORY', 'CIVIC_EDU', 'TECHNOLOGY'], admissionBlocks: ['C08'] },
-  { comboCode: 'C09', comboName: 'Địa, GDKT&PL, CN', subjects: ['MATH', 'GEOGRAPHY', 'CIVIC_EDU', 'TECHNOLOGY'], admissionBlocks: ['C09'] },
+  { comboCode: 'C07', comboName: 'Sử, Địa, Công nghệ', subjects: ['MATH', 'HISTORY', 'GEOGRAPHY', 'TECH_INDUSTRY'], admissionBlocks: ['C07'] },
+  { comboCode: 'C08', comboName: 'Sử, GDKT&PL, CN', subjects: ['MATH', 'HISTORY', 'CIVIC_EDU', 'TECH_INDUSTRY'], admissionBlocks: ['C08'] },
+  { comboCode: 'C09', comboName: 'Địa, GDKT&PL, CN', subjects: ['MATH', 'GEOGRAPHY', 'CIVIC_EDU', 'TECH_INDUSTRY'], admissionBlocks: ['C09'] },
   { comboCode: 'C10', comboName: 'Sử, Địa, Anh (C10)', subjects: ['MATH', 'HISTORY', 'GEOGRAPHY', 'ENGLISH'], admissionBlocks: ['C10'] },
   { comboCode: 'D01', comboName: 'Toán, Anh, Tin', subjects: ['MATH', 'ENGLISH', 'INFORMATICS'], admissionBlocks: ['D01'] },
   { comboCode: 'D07', comboName: 'Toán, Anh, GDKT&PL', subjects: ['MATH', 'ENGLISH', 'CIVIC_EDU'], admissionBlocks: ['D07'] },
-  { comboCode: 'D14', comboName: 'Toán, Anh, Công nghệ', subjects: ['MATH', 'ENGLISH', 'TECHNOLOGY'], admissionBlocks: ['D14'] },
+  { comboCode: 'D14', comboName: 'Toán, Anh, Công nghệ', subjects: ['MATH', 'ENGLISH', 'TECH_INDUSTRY'], admissionBlocks: ['D14'] },
   { comboCode: 'D15', comboName: 'Toán, Sử, Anh', subjects: ['MATH', 'HISTORY', 'ENGLISH'], admissionBlocks: ['D15'] },
 ];

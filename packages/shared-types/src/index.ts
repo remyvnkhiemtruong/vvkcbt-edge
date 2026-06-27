@@ -47,6 +47,7 @@ export enum AuditEventType {
   FOCUS_VIOLATION = 'focus_violation',
   AUTOSAVE = 'autosave',
   SUBMIT = 'submit',
+  EXAM_START = 'exam_start',
   PROCTOR_ACTION = 'proctor_action',
   SCORE_OVERRIDE = 'score_override',
   FULLSCREEN_EXIT = 'fullscreen_exit',
@@ -145,4 +146,7 @@ export {
   resolveQuestionPartKey,
   enrichQuestionsWithPart,
   orderQuestionsByPart,
+  orderEnglishClusterQuestions,
+  orderQuestionsForExam,
 } from './question-order';
+export type { EnglishClusterOrderQuestion } from './question-order';

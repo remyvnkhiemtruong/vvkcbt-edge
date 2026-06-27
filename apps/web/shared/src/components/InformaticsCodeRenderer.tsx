@@ -1,5 +1,6 @@
 import type { InformaticsCodeBlock } from '@vnu/shared-types';
 import { DualCodeBlockView } from './DualCodeBlockView';
+import { filledCodeBlocks } from '../utils/code-blocks';
 
 interface Props {
   codeBlocks?: InformaticsCodeBlock[];
@@ -7,10 +8,14 @@ interface Props {
 }
 
 export function InformaticsCodeRenderer({ codeBlocks, codeDisplay }: Props) {
-  if (!codeBlocks?.length) return null;
+  const filled = filledCodeBlocks(codeBlocks);
+  if (!filled.length) return null;
   return (
     <div className="informatics-code-section">
-      <DualCodeBlockView blocks={codeBlocks} display={codeDisplay} />
+      <DualCodeBlockView
+        blocks={filled}
+        display={filled.length > 1 ? codeDisplay : undefined}
+      />
     </div>
   );
 }

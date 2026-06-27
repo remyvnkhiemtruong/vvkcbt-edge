@@ -66,6 +66,10 @@ export class StudentSession {
   @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
   submittedAt?: Date;
 
+  /** Thời điểm thí sinh bấm bắt đầu làm bài — đồng hồ tính từ đây. */
+  @Column({ name: 'exam_started_at', type: 'timestamptz', nullable: true })
+  examStartedAt?: Date;
+
   @Column({ type: 'jsonb', nullable: true })
   scoreResult?: Record<string, unknown>;
 

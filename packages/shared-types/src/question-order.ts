@@ -88,6 +88,97 @@ export function enrichQuestionsWithPart<T extends { type?: string; part?: string
   });
 }
 
+export type EnglishClusterOrderQuestion = {
+  id: string;
+  part?: string;
+  partKey?: string;
+  clusterId?: string | null;
+  clusterOrder?: number | null;
+  clusterSubtype?: string;
+  content?: { subtype?: string };
+};
+
+function resolveClusterSubtype(q: EnglishClusterOrderQuestion): string | undefined {
+  if (q.clusterSubtype) return q.clusterSubtype;
+  const st = q.content?.subtype;
+  return typeof st === 'string' ? st : undefined;
+}
+
+function englishClusterGroupKey(q: EnglishClusterOrderQuestion): string {
+  if (q.clusterId) return `cluster:${q.clusterId}`;
+  const subtype = resolveClusterSubtype(q);
+  if (subtype) return `subtype:${subtype}`;
+  return `solo:${q.id}`;
+}
+
+function sortEnglishClusterQuestions<T extends EnglishClusterOrderQuestion>(
+  group: T[],
+  subtype: string | undefined,
+  seed: string,
+  groupKey: string,
+): T[] {
+  if (subtype === 'reorder') {
+    return seededShuffle(group, `${seed}:english:${groupKey}:reorder`);
+  }
+  return group
+    .map((q, idx) => ({ q, idx }))
+    .sort((a, b) => {
+      const ao = a.q.clusterOrder ?? Number.POSITIVE_INFINITY;
+      const bo = b.q.clusterOrder ?? Number.POSITIVE_INFINITY;
+      if (ao !== bo) return ao - bo;
+      return a.idx - b.idx;
+    })
+    .map(({ q }) => q);
+}
+
+/**
+ * Tiếng Anh QĐ764: trộn thứ tự các bài đọc (cluster), giữ thứ tự câu trong cluster;
+ * chỉ trộn thứ tự câu hỏi đối với dạng sắp xếp (reorder).
+ */
+export function orderEnglishClusterQuestions<T extends EnglishClusterOrderQuestion>(
+  questions: T[],
+  seed: string,
+): T[] {
+  if (questions.length === 0) return [];
+
+  const groupKeys: string[] = [];
+  const groups = new Map<string, T[]>();
+  for (const q of questions) {
+    const key = englishClusterGroupKey(q);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      groupKeys.push(key);
+    }
+    groups.get(key)!.push(q);
+  }
+
+  const shuffledKeys = seededShuffle(groupKeys, `${seed}:english:clusters`);
+  const result: T[] = [];
+  for (const key of shuffledKeys) {
+    const group = groups.get(key)!;
+    const subtype = resolveClusterSubtype(group[0]);
+    result.push(...sortEnglishClusterQuestions(group, subtype, seed, key));
+  }
+  return result;
+}
+
+/** Sắp xếp câu theo môn — Anh dùng quy tắc cluster; môn khác trộn trong phần. */
+export function orderQuestionsForExam<T extends EnglishClusterOrderQuestion & { part?: string; partKey?: string }>(
+  subjectCode: string | undefined,
+  questions: T[],
+  partOrder: string[],
+  seed: string,
+  options?: { shuffleWithinPart?: boolean },
+): T[] {
+  if ((subjectCode ?? '').toUpperCase() === 'ENGLISH') {
+    return orderEnglishClusterQuestions(questions, seed);
+  }
+  if (partOrder.length > 0) {
+    return orderQuestionsByPart(questions, partOrder, seed, options);
+  }
+  return questions;
+}
+
 /** Giữ thứ tự phần (I → II → III), chỉ trộn câu trong từng phần. */
 export function orderQuestionsByPart<T extends { id: string; part?: string; partKey?: string }>(
   questions: T[],

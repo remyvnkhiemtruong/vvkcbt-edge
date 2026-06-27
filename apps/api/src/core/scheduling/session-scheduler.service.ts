@@ -9,7 +9,7 @@ import { Student } from '../../database/entities/student.entity';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
 import { TnptComboCatalog } from '../../database/entities/tnpt-combo-catalog.entity';
-import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+import { DEFAULT_SCHOOL_NAME, assignLabRoomLabel } from '@vnu/shared-types';
 
 export interface ScheduleRow {
   id: string;
@@ -34,8 +34,8 @@ export class SessionSchedulerService {
     private readonly comboRepo: Repository<TnptComboCatalog>,
   ) {}
 
-  private roomBase(): string {
-    return process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
+  private roomLabel(): string {
+    return process.env.EDGE_ROOM_NAME || '01';
   }
 
   private roomCapacity(): number {
@@ -43,10 +43,7 @@ export class SessionSchedulerService {
   }
 
   private assignLabRoom(index: number): string {
-    const base = this.roomBase();
-    const cap = this.roomCapacity();
-    const roomNum = Math.floor(index / cap) + 1;
-    return roomNum === 1 ? base : `${base} — máy ${roomNum}`;
+    return assignLabRoomLabel(index, this.roomLabel(), this.roomCapacity());
   }
 
   private schoolName(): string {
@@ -196,7 +193,7 @@ export class SessionSchedulerService {
         <p><strong>Họ tên:</strong> ${r.fullName ?? '—'}</p>
         <p><strong>SBD:</strong> ${r.sbd}</p>
         <p><strong>Mã PIN:</strong> <span class="pin">${r.pin ?? '—'}</span></p>
-        <p><strong>Phòng:</strong> ${r.labRoom ?? this.roomBase()}</p>
+        <p><strong>Phòng:</strong> ${r.labRoom ?? this.roomLabel()}</p>
         <p class="warn">Không chia sẻ mã PIN</p>
       </div>`,
       )

@@ -25,22 +25,31 @@ export function EndSubjectSessionPanel({
   const [preview, setPreview] = useState<SubjectRoomCompleteData | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const subjectNameVi = getSubjectNameVi(subjectCode);
+  const hasSubject = subjectCode.trim().length > 0;
+  const subjectNameVi = hasSubject ? getSubjectNameVi(subjectCode) : '—';
 
   const loadPreview = async () => {
+    if (!hasSubject) {
+      setMsg('Chọn môn thi trước khi kiểm tra tiến độ.');
+      return;
+    }
+    if (!room.trim()) {
+      setMsg('Nhập phòng thi trước khi kiểm tra tiến độ.');
+      return;
+    }
     setBusy(true);
     setMsg('');
     try {
       const res = await proctorFetch(
-        `/proctor/sessions/${examSessionId}/room-score-sheet/preview?subjectCode=${encodeURIComponent(subjectCode)}&room=${encodeURIComponent(room)}`,
+        `/proctor/sessions/${examSessionId}/room-score-sheet/preview?subjectCode=${encodeURIComponent(subjectCode.trim())}&room=${encodeURIComponent(room.trim())}`,
         token,
       );
       const data = await res.json();
       setPreview({
         examSessionId,
-        subjectCode,
+        subjectCode: subjectCode.trim(),
         subjectNameVi,
-        room,
+        room: room.trim(),
         stats: data.stats,
         rows: data.rows ?? [],
       });
@@ -52,20 +61,28 @@ export function EndSubjectSessionPanel({
   };
 
   const endSession = async () => {
+    if (!hasSubject) {
+      setMsg('Chọn môn thi trước khi kết thúc ca.');
+      return;
+    }
+    if (!room.trim()) {
+      setMsg('Nhập phòng thi trước khi kết thúc ca.');
+      return;
+    }
     if (!window.confirm('Kết thúc ca thi? Thí sinh chưa nộp sẽ không được tính vào biên bản tự động.')) return;
     setBusy(true);
     setMsg('');
     try {
       const res = await proctorFetch(`/proctor/sessions/${examSessionId}/end-subject-room`, token, {
         method: 'POST',
-        body: JSON.stringify({ subjectCode, room }),
+        body: JSON.stringify({ subjectCode: subjectCode.trim(), room: room.trim() }),
       });
       const data = await res.json();
       const payload: SubjectRoomCompleteData = {
         examSessionId,
-        subjectCode,
+        subjectCode: subjectCode.trim(),
         subjectNameVi,
-        room,
+        room: room.trim(),
         stats: data.stats,
         rows: data.rows ?? [],
         forced: true,
@@ -90,6 +107,11 @@ export function EndSubjectSessionPanel({
         value={subjectCode}
         onChange={(code) => onSubjectCodeChange?.(code)}
       />
+      {!hasSubject && (
+        <p className="cbt-error-text" style={{ fontSize: '0.85rem' }}>
+          Chọn môn thi để kết thúc ca.
+        </p>
+      )}
       <p className="admin-hint">
         Xem tiến độ nộp bài và kết thúc ca theo từng môn (các môn cùng khung giờ trong một ca).
       </p>
@@ -98,10 +120,10 @@ export function EndSubjectSessionPanel({
           Phòng
           <input className="cbt-input" value={room} onChange={(e) => setRoom(e.target.value)} />
         </label>
-        <button type="button" className="cbt-btn cbt-btn-outline" onClick={loadPreview} disabled={busy}>
+        <button type="button" className="cbt-btn cbt-btn-outline" onClick={loadPreview} disabled={busy || !hasSubject}>
           Kiểm tra tiến độ
         </button>
-        <button type="button" className="cbt-btn cbt-btn-primary" onClick={endSession} disabled={busy}>
+        <button type="button" className="cbt-btn cbt-btn-primary" onClick={endSession} disabled={busy || !hasSubject}>
           Kết thúc ca thi
         </button>
       </div>

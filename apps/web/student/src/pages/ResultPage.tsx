@@ -20,6 +20,12 @@ export default function ResultPage() {
         <p className="total-score">
           {vi.result.totalScore}: {scoreResult?.total?.toFixed(2) ?? '—'}
         </p>
+        {scoreResult?.informaticsBranchInvalid && (
+          <p className="result-page__branch-warning" role="alert">
+            Phần II Tin học: bạn làm lẫn hai nhánh (câu 3–4 KHMT và câu 5–6 THUD). Bốn câu tùy chọn
+            (3–6) không được chấm điểm; chỉ câu 1–2 (chung) được tính.
+          </p>
+        )}
         {parts && (
           <div className="part-scores" style={{ marginTop: '1rem' }}>
             <p>

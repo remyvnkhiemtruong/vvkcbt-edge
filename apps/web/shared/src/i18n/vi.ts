@@ -1,4 +1,7 @@
 import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+import { SO_GD_DISPLAY, SCHOOL_BRAND_DISPLAY } from './brand';
+
+export { SO_GD_DISPLAY, SCHOOL_BRAND_DISPLAY } from './brand';
 
 export const SCHOOL_NAME =
   (typeof import.meta !== 'undefined' &&
@@ -20,7 +23,7 @@ export function isProductionUi(): boolean {
 
 export const vi = {
   footerDoc: 'Tài liệu Đặc tả Giao diện CBT',
-  footerPublic: 'VVKCBT — THPT Võ Văn Kiệt',
+  footerPublic: `VVKCBT — ${SCHOOL_BRAND_DISPLAY}`,
   systemTitle: 'HỆ THỐNG THI TRẮC NGHIỆM',
   copyrightFooter: 'Copyright 2026 by Truong Minh Khiem',
   subtitle: 'Hệ thống khảo thí CBT — VVKCBT',
@@ -61,11 +64,8 @@ export const vi = {
     finish: 'Kết thúc',
   },
   exam: {
-    headerDept: 'Sở GDĐT Cà Mau',
-    headerSchool:
-      (typeof import.meta !== 'undefined' &&
-        (import.meta as { env?: { VITE_SCHOOL_BRAND_NAME?: string } }).env?.VITE_SCHOOL_BRAND_NAME) ||
-      DEFAULT_SCHOOL_NAME,
+    headerDept: SO_GD_DISPLAY,
+    headerSchool: SCHOOL_BRAND_DISPLAY,
     loading: 'Đang tải đề thi...',
     submit: 'NỘP BÀI',
     submitConfirm: 'Bạn chắc chắn muốn nộp bài? Sau khi nộp không thể sửa.',

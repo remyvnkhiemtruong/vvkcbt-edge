@@ -1,14 +1,30 @@
 @import './cbt-tokens.css';
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  font-family: var(--cbt-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  font-family: var(--cbt-font);
+  font-family: inherit;
   color: var(--cbt-text);
   background: var(--cbt-bg);
+}
+
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
 }
 
 .cbt-btn {
@@ -114,4 +130,67 @@ body {
 .cbt-error-text {
   color: var(--cbt-danger);
   font-size: 0.9rem;
+}
+
+.cbt-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cbt-brand-logo__img {
+  display: block;
+  background: transparent;
+}
+
+.cbt-brand-logo--align-left {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.cbt-brand-logo--align-center {
+  justify-content: center;
+  text-align: center;
+}
+
+.cbt-brand-logo__text {
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.cbt-brand-logo__dept {
+  font-size: 0.72rem;
+  color: var(--cbt-text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.cbt-brand-logo__school {
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.cbt-brand-logo--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.cbt-brand-logo--stack.cbt-brand-logo--align-center {
+  align-items: center;
+  text-align: center;
+}
+
+.cbt-brand-logo--stack .cbt-brand-logo__text {
+  text-align: inherit;
+}
+
+.cbt-brand-logo--login .cbt-brand-logo__school {
+  font-size: 0.95rem;
+}
+
+.cbt-brand-logo--header .cbt-brand-logo__school {
+  font-size: 0.8rem;
 }

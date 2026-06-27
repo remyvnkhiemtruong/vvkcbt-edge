@@ -47,14 +47,11 @@ export function resolveInformaticsTfSlot(
 export function resolveInformaticsBranch(
   slotsAnswered: Record<InformaticsTfSlot, boolean>,
 ): InformaticsBranchSelection {
-  const s3 = slotsAnswered[3];
-  const s4 = slotsAnswered[4];
-  const s5 = slotsAnswered[5];
-  const s6 = slotsAnswered[6];
-  const anyOptional = s3 || s4 || s5 || s6;
-  if (!anyOptional) return 'common_only';
-  if (s3 && s4 && !s5 && !s6) return 'khmt';
-  if (s5 && s6 && !s3 && !s4) return 'thud';
+  const khmt = slotsAnswered[3] || slotsAnswered[4];
+  const thud = slotsAnswered[5] || slotsAnswered[6];
+  if (!khmt && !thud) return 'common_only';
+  if (khmt && !thud) return 'khmt';
+  if (thud && !khmt) return 'thud';
   return 'invalid_optional';
 }
 
@@ -119,7 +116,7 @@ export function applyInformaticsBranchScoring<T extends ScoreBreakdownRow>(
     const slot = slotById.get(row.questionId);
     if (!slot || !isInformaticsOptionalSlot(slot)) return row;
     if (shouldScoreInformaticsOptionalSlot(slot, branch)) return row;
-    return { ...row, score: 0 };
+    return { ...row, score: 0, maxScore: 0 };
   });
 
   return {
@@ -127,34 +124,4 @@ export function applyInformaticsBranchScoring<T extends ScoreBreakdownRow>(
     branch,
     branchInvalid: branch === 'invalid_optional',
   };
-}
-
-/** Khi thí sinh chọn nhánh, xóa câu nhánh đối lập (UI). */
-export function patchInformaticsAnswers(
-  questions: InformaticsQuestionRef[],
-  answers: Record<string, unknown>,
-  questionId: string,
-  newAnswer: unknown,
-  subjectCode?: string,
-): Record<string, unknown> {
-  if ((subjectCode ?? '').toUpperCase() !== 'INFORMATICS') {
-    return { ...answers, [questionId]: newAnswer };
-  }
-
-  const part2 = listInformaticsPart2Questions(questions, 'INFORMATICS');
-  const idx = part2.findIndex((q) => q.id === questionId);
-  if (idx < 0) return { ...answers, [questionId]: newAnswer };
-
-  const slot = resolveInformaticsTfSlot(part2[idx], idx);
-  const patch = { ...answers, [questionId]: newAnswer };
-  if (!slot || slot <= 2 || !isTrueFalseAnswered(newAnswer)) return patch;
-
-  part2.forEach((q, i) => {
-    const s = resolveInformaticsTfSlot(q, i);
-    if (!s) return;
-    if ((slot === 3 || slot === 4) && (s === 5 || s === 6)) delete patch[q.id];
-    if ((slot === 5 || slot === 6) && (s === 3 || s === 4)) delete patch[q.id];
-  });
-
-  return patch;
 }

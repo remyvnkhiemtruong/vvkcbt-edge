@@ -84,8 +84,53 @@ function isBooleanArray4(v: unknown): v is boolean[] {
   return Array.isArray(v) && v.length === 4 && v.every((x) => typeof x === 'boolean');
 }
 
+/** Phần II Tin học: tối đa 4đ trên bài thi (câu 1–2 + một nhánh 2 câu), dù ngân hàng có 6 câu. */
+export const INFORMATICS_PART2_EXAM_MAX = 4;
+
+export function sumInformaticsExamMaxScore(questions: PaperQuestion[]): number {
+  let part1 = 0;
+  for (const q of questions) {
+    if (q.part === 'part1_mcq') part1 += Number(q.maxScore) || 0.25;
+  }
+  return part1 + INFORMATICS_PART2_EXAM_MAX;
+}
+
 function sumMaxScore(questions: PaperQuestion[]): number {
   return questions.reduce((s, q) => s + (Number(q.maxScore) || 0), 0);
+}
+
+function validateTotalScore(
+  subjectCode: string,
+  questions: PaperQuestion[],
+  nameVi: string,
+  errors: string[],
+) {
+  const score =
+    subjectCode === 'INFORMATICS'
+      ? sumInformaticsExamMaxScore(questions)
+      : sumMaxScore(questions);
+  if (Math.abs(score - 10) > 0.01) {
+    const raw = sumMaxScore(questions);
+    errors.push(
+      subjectCode === 'INFORMATICS'
+        ? `${nameVi}: tổng điểm bài thi phải = 10 (Phần I + 4đ Phần II), hiện ${score} (tổng maxScore câu: ${raw})`
+        : `${nameVi}: tổng điểm phải = 10, hiện ${score}`,
+    );
+  }
+  if (subjectCode === 'INFORMATICS') {
+    for (const q of questions) {
+      if (
+        q.part === 'part2_true_false' &&
+        q.type === 'true_false' &&
+        q.maxScore != null &&
+        Math.abs(Number(q.maxScore) - 1) > 0.01
+      ) {
+        errors.push(
+          `${nameVi}: câu TF Phần II ${q.id ?? '?'} phải có maxScore = 1, hiện ${q.maxScore}`,
+        );
+      }
+    }
+  }
 }
 
 export function validateSubjectBlueprint(input: BlueprintValidationInput): BlueprintValidationResult {
@@ -96,7 +141,7 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
   const structure = getDefaultStructure(subjectCode);
 
   if (!structure) {
-    return { valid: false, errors: [`Không có cấu trúc QĐ764 cho môn ${subjectCode}`], warnings };
+    return { valid: false, errors: [`Không có cấu trúc đề mặc định cho môn ${subjectCode}`], warnings };
   }
 
   const questions = (input.paper?.questions ?? []) as PaperQuestion[];
@@ -142,10 +187,7 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
         }
       }
     }
-    const score = sumMaxScore(questions);
-    if (Math.abs(score - 10) > 0.01) {
-      errors.push(`${nameVi}: tổng điểm phải = 10, hiện ${score}`);
-    }
+    validateTotalScore(subjectCode, questions, nameVi, errors);
   } else {
     for (const [partKey, partCfg] of Object.entries(structure.parts)) {
       const partQuestions = questionsByPart(questions, partKey);
@@ -193,10 +235,7 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
         }
       }
     }
-    const score = sumMaxScore(questions);
-    if (Math.abs(score - 10) > 0.01) {
-      errors.push(`${nameVi}: tổng điểm phải = 10, hiện ${score}`);
-    }
+    validateTotalScore(subjectCode, questions, nameVi, errors);
   }
 
   return { valid: errors.length === 0, errors, warnings };

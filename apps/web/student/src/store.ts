@@ -22,6 +22,7 @@ interface ExamState {
       maxPart2: number;
       maxPart3: number;
     };
+    informaticsBranchInvalid?: boolean;
   } | null;
   sbd: string | null;
   examAccount: string | null;

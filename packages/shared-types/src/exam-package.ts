@@ -12,6 +12,10 @@ export interface ExamBranding {
   soGdName: string;
   schoolName: string;
   logoPath?: string;
+  /** Địa danh trên văn bản hành chính (vd. Cà Mau) */
+  placeName?: string;
+  /** Tên ban coi thi (tuỳ chọn) */
+  examBoardName?: string;
 }
 
 export interface ExamPackageManifest {
@@ -27,7 +31,7 @@ export interface ExamPackageManifest {
   subjectCode?: string;
 }
 
-/** Một tài khoản thi = một môn (v1.2) */
+/** v1.2: một tài khoản / thí sinh; có thể nhiều dòng nếu HS đăng ký nhiều môn (cùng examAccount). */
 export interface ExamPackageCredentialRow {
   studentCode: string;
   fullName: string;
@@ -48,6 +52,10 @@ export interface ExamPackageSessionConfig {
   durationMin?: number;
   startAt?: string;
   rules: ExamRules;
+  /** Nhãn phòng thi — hiển thị verbatim trên VBHC; phòng đầu khi xếp SBD */
+  labRoomLabel?: string;
+  /** Sức chứa mỗi phòng máy (mặc định 30) */
+  labRoomCapacity?: number;
 }
 
 export interface ExamPackageSubjectRow {
@@ -115,7 +123,7 @@ export interface ExamPackageExportState {
   session: ExamPackageSessionConfig;
   subjects: ExamPackageSubjectRow[];
   students: ExamPackageStudentRow[];
-  /** v1.2: một dòng / (học sinh × môn) */
+  /** v1.2: một dòng / môn đăng ký; cùng HS dùng chung examAccount + PIN */
   credentials?: ExamPackageCredentialRow[];
   clusters: ExamPackageClusterRow[];
   papers: Record<string, ExamPackagePaperRow>;
@@ -162,14 +170,34 @@ export function injectClusterPassages(
       (cluster.passage as { text?: string })?.text ??
       (cluster.passage as { body?: string })?.body ??
       '';
+    const instruction =
+      (cluster.passage as { instruction?: string })?.instruction ??
+      (cluster.passage as { title?: string })?.title ??
+      '';
     return {
       ...q,
       clusterSubtype: cluster.clusterSubtype,
       content: {
         ...q.content,
-        passage: passageText,
+        passage: cluster.clusterSubtype === 'reorder' ? undefined : passageText || undefined,
+        instruction: instruction || undefined,
         subtype: cluster.clusterSubtype,
       },
     } as ExamPackageQuestionRow & { clusterSubtype?: string };
   });
+}
+
+/** Gán nhãn phòng verbatim; tăng nhóm số cuối khi vượt capacity (01→02). */
+export function assignLabRoomLabel(index: number, label?: string, capacity = 30): string {
+  const base = (label?.trim() || '01');
+  const roomIndex = Math.floor(index / capacity);
+  if (roomIndex === 0) return base;
+
+  const m = /^(.*?)(\d+)$/.exec(base);
+  if (m) {
+    const width = m[2].length;
+    const next = parseInt(m[2], 10) + roomIndex;
+    return `${m[1]}${String(next).padStart(width, '0')}`;
+  }
+  return `${base} — ${roomIndex + 1}`;
 }

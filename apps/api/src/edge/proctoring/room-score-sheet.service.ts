@@ -107,8 +107,15 @@ export class RoomScoreSheetService {
     stats: { total: number; completed: number },
   ): SheetMeta {
     const now = new Date();
-    const schoolName = process.env.VITE_SCHOOL_NAME || process.env.SCHOOL_NAME || DEFAULT_SCHOOL_NAME;
-    const provinceName = process.env.VITE_PROVINCE_NAME || 'SỞ GDĐT CÀ MAU';
+    const schoolName =
+      process.env.VITE_SCHOOL_BRAND_NAME ||
+      process.env.VITE_SCHOOL_NAME ||
+      process.env.SCHOOL_NAME ||
+      DEFAULT_SCHOOL_NAME;
+    const provinceName =
+      process.env.VITE_SO_GD_NAME ||
+      process.env.VITE_PROVINCE_NAME ||
+      'SỞ GIÁO DỤC VÀ ĐÀO TẠO CÀ MAU';
     return {
       examName,
       subjectName,

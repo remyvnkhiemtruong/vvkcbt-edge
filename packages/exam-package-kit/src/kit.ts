@@ -74,15 +74,27 @@ function validateCredentialRows(
   creds: ExamPackageCredentialRow[],
   errors: string[],
 ): void {
-  const seenAccounts = new Set<string>();
+  const accountOwner = new Map<string, string>();
+  const accountPin = new Map<string, string>();
   for (const c of creds) {
     if (!c.examAccount?.trim()) errors.push(`Thiếu tài khoản: ${c.fullName} / ${c.subjectCode}`);
     else if (!/^\d{6}$/.test(c.examAccount.trim())) {
       errors.push(`Tài khoản phải 6 chữ số: ${c.examAccount}`);
-    } else if (seenAccounts.has(c.examAccount)) {
-      errors.push(`Tài khoản trùng: ${c.examAccount}`);
     } else {
-      seenAccounts.add(c.examAccount);
+      const acct = c.examAccount.trim();
+      const owner = accountOwner.get(acct);
+      if (owner && owner !== c.studentCode) {
+        errors.push(`Tài khoản ${acct} trùng giữa thí sinh khác nhau`);
+      } else {
+        accountOwner.set(acct, c.studentCode);
+      }
+      const pin = c.pin?.trim();
+      const prevPin = accountPin.get(acct);
+      if (prevPin && pin && prevPin !== pin) {
+        errors.push(`PIN không khớp cho tài khoản ${acct}`);
+      } else if (pin) {
+        accountPin.set(acct, pin);
+      }
     }
     if (!c.pin?.trim()) errors.push(`Thiếu PIN: ${c.fullName} / ${c.subjectCode}`);
     else if (!/^\d{8}$/.test(c.pin.trim())) {
@@ -195,6 +207,141 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   warnings.push(...blueprint.warnings);
 
   return { valid: errors.length === 0, manifest: state.manifest, errors, warnings };
+}
+
+/** Gói một ca — nhiều môn cùng khung giờ, một ZIP, tài khoản theo thí sinh. */
+export function sliceStateForSession(
+  state: ExamPackageExportState,
+  subjectCodes: string[],
+): ExamPackageExportState {
+  if (!subjectCodes.length) throw new Error('Chưa chọn môn trong ca thi');
+
+  const codes = new Set(subjectCodes);
+  const subjects = state.subjects.filter((s) => codes.has(s.code));
+  if (subjects.length !== subjectCodes.length) {
+    const missing = subjectCodes.filter((c) => !subjects.some((s) => s.code === c));
+    throw new Error(`Chưa có lịch: ${missing.join(', ')}`);
+  }
+
+  const timeKeys = new Set(subjects.map((s) => `${s.examDate}|${s.startTime}|${s.endTime}`));
+  if (timeKeys.size > 1) {
+    throw new Error('Các môn trong cùng ca phải cùng khung giờ (ngày, giờ bắt đầu, giờ kết thúc)');
+  }
+
+  const papers: Record<string, ExamPackagePaperRow> = {};
+  for (const code of subjectCodes) {
+    const paper = state.papers[code];
+    if (!paper?.questions?.length) throw new Error(`Môn ${code} chưa có đề`);
+    papers[code] = paper;
+  }
+
+  const students = state.students
+    .filter((st) => st.subjects.some((s) => codes.has(s)))
+    .map((st) => ({
+      ...st,
+      subjects: st.subjects.filter((s) => codes.has(s)),
+    }));
+
+  const credentials = state.credentials?.filter((c) => codes.has(c.subjectCode));
+
+  return {
+    manifest: {
+      ...state.manifest,
+      exportScope: 'full',
+      subjectCode: undefined,
+      createdAt: new Date().toISOString(),
+    },
+    session: {
+      ...state.session,
+      rules: {
+        ...state.session.rules,
+        subjects: (state.session.rules.subjects ?? []).filter((s) => codes.has(s.code)),
+      },
+    },
+    subjects,
+    students,
+    credentials,
+    clusters: state.clusters.filter((c) => codes.has(c.subject)),
+    papers,
+    mediaFiles: state.mediaFiles,
+    credentialsAssignedAt: state.credentialsAssignedAt,
+    credentialsPrintedAt: state.credentialsPrintedAt,
+  };
+}
+
+export function validateSessionExport(
+  state: ExamPackageExportState,
+  subjectCodes: string[],
+): ExamPackageValidateResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  let sliced: ExamPackageExportState;
+  try {
+    sliced = sliceStateForSession(state, subjectCodes);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [e instanceof Error ? e.message : 'Không tạo được gói ca thi'],
+      warnings,
+    };
+  }
+
+  if (!sliced.manifest?.packageId) errors.push('Thiếu manifest.packageId');
+  if (!sliced.session?.name?.trim()) errors.push('Thiếu tên kỳ thi');
+
+  for (const code of subjectCodes) {
+    const count = sliced.students.filter((st) => st.subjects.includes(code)).length;
+    if (!count) warnings.push(`Không có thí sinh đăng ký môn ${code}`);
+  }
+
+  const creds = sliced.credentials ?? [];
+  if (creds.length) {
+    validateCredentialRows(creds, errors);
+  } else {
+    for (const st of sliced.students) {
+      if (!st.sbd?.trim() || !st.pin?.trim()) {
+        errors.push(`Thí sinh ${st.fullName}: chưa có SBD/PIN — xếp & in phiếu tại Composer`);
+      }
+    }
+  }
+
+  if (!sliced.credentialsAssignedAt) errors.push('Chưa xếp SBD & gán PIN trong Composer');
+  if (!sliced.credentialsPrintedAt) {
+    errors.push('Chưa in phiếu thí sinh — in phiếu tại Composer trước khi xuất ZIP');
+  }
+
+  const blueprint = validateAllSubjectBlueprints(
+    sliced.papers,
+    subjectCodes,
+    sliced.clusters,
+    sliced.manifest?.mediaManifest,
+  );
+  errors.push(...blueprint.errors);
+  warnings.push(...blueprint.warnings);
+
+  return { valid: errors.length === 0, manifest: sliced.manifest, errors, warnings };
+}
+
+export async function exportSessionFromState(
+  state: ExamPackageExportState,
+  subjectCodes: string[],
+): Promise<Buffer> {
+  const validation = validateSessionExport(state, subjectCodes);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  const sliced = sliceStateForSession(state, subjectCodes);
+  return packState(sliced);
+}
+
+export function buildSessionZipFilename(
+  state: ExamPackageExportState,
+  subjectCodes: string[],
+): string {
+  const row = state.subjects.find((s) => subjectCodes.includes(s.code));
+  const pkg = state.manifest.packageId.slice(0, 8);
+  const date = row?.examDate?.replace(/-/g, '') ?? 'nodate';
+  const time = row?.startTime?.replace(':', '') ?? '0000';
+  const subjPart = subjectCodes.length === 1 ? subjectCodes[0] : `${subjectCodes.length}mon`;
+  return `exam-${pkg}-${subjPart}-${date}-${time}.zip`;
 }
 
 /** Tách state cho xuất một môn — mỗi ZIP có packageId riêng (ca độc lập trên Edge). */

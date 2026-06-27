@@ -40,6 +40,7 @@ export const studentApi = {
       }),
     }),
   getExam: () => apiFetch('/edge/exam'),
+  startExam: () => apiFetch('/edge/start-exam', { method: 'POST' }),
   /** Đồng bộ trong lúc thi — không logout khi 401 tạm (IP/locked). */
   syncExam: () => apiFetch('/edge/exam', {}, examFetchOpts),
   autosave: (answers: Record<string, unknown>, idempotencyKey?: string) => {

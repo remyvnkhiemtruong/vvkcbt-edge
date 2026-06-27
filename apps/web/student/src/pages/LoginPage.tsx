@@ -140,19 +140,21 @@ export default function LoginPage() {
       <div className="student-login__window">
 
         <header className="student-login__topbar">
-
-          <span>{vi.systemTitle}</span>
-
+          <span className="student-login__topbar-title">{vi.systemTitle}</span>
         </header>
 
         <div className="student-login__body">
 
           <div className="student-login__card">
 
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-
-              <CbtBrandLogo variant="login" size={88} showSchoolName logoUrl="/student/branding/logo.png" />
-
+            <div className="student-login__brand">
+              <CbtBrandLogo
+                variant="login"
+                size={72}
+                showSchoolName
+                layout="stack"
+                align="center"
+              />
             </div>
 
             <h2>{vi.login.title}</h2>

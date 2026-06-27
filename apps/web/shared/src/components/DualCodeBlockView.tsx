@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { InformaticsCodeBlock } from '@vnu/shared-types';
+import { SyntaxHighlightedCode } from './SyntaxHighlightedCode';
+import { filledCodeBlocks } from '../utils/code-blocks';
 
 interface Props {
   blocks: InformaticsCodeBlock[];
@@ -18,37 +20,36 @@ function CodePre({ block }: { block: InformaticsCodeBlock }) {
   return (
     <div className="informatics-code-block">
       {label && <div className="informatics-code-block__label">{label}</div>}
-      <pre className={`rich-code-block rich-code-block--${lang}`}>
-        <code className={lang ? `language-${lang}` : undefined}>{block.source}</code>
-      </pre>
+      <SyntaxHighlightedCode source={block.source} language={lang} className={`rich-code-block rich-code-block--${lang}`} />
     </div>
   );
 }
 
 export function DualCodeBlockView({ blocks, display }: Props) {
-  const mode = display ?? (blocks.length > 1 ? 'side_by_side' : 'tabs');
+  const filled = useMemo(() => filledCodeBlocks(blocks), [blocks]);
+  const mode = display ?? (filled.length > 1 ? 'side_by_side' : 'tabs');
   const [active, setActive] = useState(0);
 
-  if (!blocks.length) return null;
+  if (!filled.length) return null;
 
-  if (mode === 'side_by_side' && blocks.length > 1) {
+  if (mode === 'side_by_side' && filled.length > 1) {
     return (
       <div className="informatics-dual-code informatics-dual-code--side">
-        {blocks.map((b, i) => (
+        {filled.map((b, i) => (
           <CodePre key={i} block={b} />
         ))}
       </div>
     );
   }
 
-  if (blocks.length === 1) {
-    return <CodePre block={blocks[0]} />;
+  if (filled.length === 1) {
+    return <CodePre block={filled[0]} />;
   }
 
   return (
     <div className="informatics-dual-code informatics-dual-code--tabs">
       <div className="informatics-dual-code__tabs" role="tablist">
-        {blocks.map((b, i) => (
+        {filled.map((b, i) => (
           <button
             key={i}
             type="button"
@@ -62,7 +63,7 @@ export function DualCodeBlockView({ blocks, display }: Props) {
         ))}
       </div>
       <div role="tabpanel">
-        <CodePre block={blocks[active]} />
+        <CodePre block={filled[active]} />
       </div>
     </div>
   );

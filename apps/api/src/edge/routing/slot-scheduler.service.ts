@@ -62,7 +62,7 @@ export class SlotSchedulerService {
     });
     const lockedSessions = new Set<string>();
     for (const slot of toLock) {
-      if (slot.status !== 'completed') {
+      if (slot.status !== 'completed' && !slot.studentSessionId) {
         await this.slotRepo.update(slot.id, { status: 'locked' });
         lockedSessions.add(slot.examSessionId);
       }

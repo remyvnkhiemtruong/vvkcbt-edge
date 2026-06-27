@@ -6,7 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
-import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsByPart, DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsForExam, DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
 import { QuestionCluster } from '../../database/entities/question-cluster.entity';
 import { In } from 'typeorm';
 import { AuditService } from '../../shared/audit/audit.service';
@@ -43,7 +43,10 @@ export class StudentAuthService {
     const envSessionId = this.configService.get<string>('EDGE_ACTIVE_SESSION_ID');
     const roomName = this.configService.get<string>('EDGE_ROOM_NAME') || 'Phòng máy số 1';
     const capacity = parseInt(this.configService.get<string>('EDGE_ROOM_CAPACITY') || '30', 10);
-    const schoolName = this.configService.get<string>('VITE_SCHOOL_NAME') || DEFAULT_SCHOOL_NAME;
+    const schoolName =
+      this.configService.get<string>('VITE_SCHOOL_BRAND_NAME') ||
+      this.configService.get<string>('VITE_SCHOOL_NAME') ||
+      DEFAULT_SCHOOL_NAME;
 
     let examSessionId = envSessionId?.trim() || '';
     let sessionName = '';
@@ -110,13 +113,15 @@ export class StudentAuthService {
     }
 
     if (!session.examPaperId) {
-      if (!session.subjectCode) {
+      let subjectCode = session.subjectCode;
+      if (!subjectCode && session.studentId) {
+        subjectCode = await this.resolveLoginSubjectCode(session.studentId, resolvedSessionId);
+        session.subjectCode = subjectCode;
+      }
+      if (!subjectCode) {
         throw new BadRequestException('Chưa phân môn thi cho thí sinh');
       }
-      const paper = await this.examRouter.resolvePaperBySubject(
-        resolvedSessionId,
-        session.subjectCode,
-      );
+      const paper = await this.examRouter.resolvePaperBySubject(resolvedSessionId, subjectCode);
       session.examPaperId = paper.id;
     }
 
@@ -161,6 +166,25 @@ export class StudentAuthService {
     };
   }
 
+  private async resolveLoginSubjectCode(studentId: string, examSessionId: string): Promise<string> {
+    const slots = await this.examRouter.listSubjectSlots(studentId, examSessionId);
+    const active = slots.filter((s) => s.status !== 'completed' && s.status !== 'locked');
+    if (active.length === 1) {
+      return active[0].subjectCode;
+    }
+    const open = active.filter((s) => s.status === 'open');
+    if (open.length === 1) {
+      return open[0].subjectCode;
+    }
+    if (active.length === 0) {
+      throw new BadRequestException('Thí sinh chưa đăng ký môn thi trong ca này');
+    }
+    if (open.length > 1) {
+      throw new BadRequestException('Nhiều môn đang mở — liên hệ giám thị');
+    }
+    throw new BadRequestException('Chưa đến giờ thi môn đã đăng ký');
+  }
+
   private async ensureSubjectSlotStarted(session: StudentSession) {
     if (!session.studentId || !session.subjectCode) return;
     const active = await this.examRouter.findActiveSlotForSession(session.id);
@@ -185,14 +209,76 @@ export class StudentAuthService {
     }
   }
 
+  private async assertCanStartExam(session: StudentSession) {
+    if (!session.studentId || !session.subjectCode) {
+      throw new BadRequestException('Chưa phân môn thi');
+    }
+    const slots = await this.examRouter.listSubjectSlots(session.studentId, session.examSessionId);
+    const slot = slots.find((s) => s.subjectCode === session.subjectCode);
+    if (!slot) throw new BadRequestException('Không có lịch thi cho môn này');
+    if (slot.status === 'completed') throw new BadRequestException('Đã hoàn thành bài thi');
+    if (slot.status === 'locked') throw new BadRequestException('Ca thi đã kết thúc');
+    const now = new Date();
+    if (now < new Date(slot.scheduledStart)) {
+      throw new BadRequestException('Ca thi chưa mở — chờ giám thị');
+    }
+    if (now > new Date(slot.scheduledEnd)) {
+      throw new BadRequestException('Đã hết thời gian ca thi');
+    }
+    const examSession = await this.examSessionRepo.findOne({ where: { id: session.examSessionId } });
+    const proctorAtTime = examSession?.rules?.proctoring?.release_mode === 'proctor_at_time';
+    if (proctorAtTime && slot.status !== 'open') {
+      throw new BadRequestException('Chờ giám thị mở đề');
+    }
+  }
+
+  private computeExamEndsAt(
+    session: StudentSession,
+    template: { durationMin?: number } | null,
+    examSession: ExamSession,
+  ): string | undefined {
+    if (!session.examStartedAt) return undefined;
+    const durationMin = (template?.durationMin ?? examSession.durationMin ?? 90) + (session.timeExtensionMin ?? 0);
+    const end = new Date(session.examStartedAt);
+    end.setMinutes(end.getMinutes() + durationMin);
+    return end.toISOString();
+  }
+
+  async startExam(session: StudentSession, ip: string) {
+    const sessionFull = await this.sessionRepo.findOne({
+      where: { id: session.id },
+      relations: ['examPaper', 'examSession', 'student'],
+    });
+    if (!sessionFull?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
+    if (sessionFull.submittedAt) throw new BadRequestException('Đã nộp bài');
+    if (sessionFull.examStartedAt) {
+      return this.getExam(sessionFull);
+    }
+
+    await this.assertCanStartExam(sessionFull);
+
+    sessionFull.examStartedAt = new Date();
+    await this.sessionRepo.save(sessionFull);
+
+    await this.ensureSubjectSlotStarted(sessionFull);
+
+    await this.auditService.log({
+      eventType: AuditEventType.EXAM_START,
+      examSessionId: sessionFull.examSessionId,
+      studentSessionId: sessionFull.id,
+      ip,
+      payload: { sbd: sessionFull.sbd, subjectCode: sessionFull.subjectCode },
+    });
+
+    return this.getExam(sessionFull);
+  }
+
   async getExam(session: StudentSession) {
     const sessionWithPaper = await this.sessionRepo.findOne({
       where: { id: session.id },
       relations: ['examPaper', 'examSession', 'student'],
     });
     if (!sessionWithPaper?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
-
-    await this.ensureSubjectSlotStarted(sessionWithPaper);
 
     const paper = sessionWithPaper.examPaper;
     const examSession = sessionWithPaper.examSession;
@@ -210,21 +296,31 @@ export class StudentAuthService {
       rawQuestions as Array<{ id: string; type?: string; part?: string; partKey?: string }>,
       structure ?? undefined,
     ) as Array<Record<string, unknown> & { id: string }>;
-    const shuffleWithinPart = structure?.shuffleWithinPart ?? true;
-    const orderedRaw: Array<Record<string, unknown> & { id: string }> =
-      partOrder.length > 0
-        ? (orderQuestionsByPart(normalizedRaw, partOrder, session.id, { shuffleWithinPart }) as Array<
-            Record<string, unknown> & { id: string }
-          >)
-        : normalizedRaw;
+
     const clusterIds = [
-      ...new Set(orderedRaw.map((q) => q.clusterId as string).filter(Boolean)),
+      ...new Set(normalizedRaw.map((q) => q.clusterId as string).filter(Boolean)),
     ];
     const clusters =
       clusterIds.length > 0
         ? await this.clusterRepo.find({ where: { id: In(clusterIds) } })
         : [];
     const clusterMap = new Map(clusters.map((c) => [c.id, c]));
+
+    const withClusterMeta = normalizedRaw.map((q) => {
+      const cluster = q.clusterId ? clusterMap.get(String(q.clusterId)) : undefined;
+      return cluster
+        ? { ...q, clusterSubtype: cluster.clusterSubtype }
+        : q;
+    });
+
+    const shuffleWithinPart = structure?.shuffleWithinPart ?? true;
+    const orderedRaw = orderQuestionsForExam(
+      paper.subject,
+      withClusterMeta as Array<Record<string, unknown> & { id: string }>,
+      partOrder,
+      session.id,
+      { shuffleWithinPart },
+    ) as Array<Record<string, unknown> & { id: string }>;
 
     const questions = orderedRaw.map((q) => {
       const stripped = this.scoringService.stripCorrectKey(q);
@@ -250,26 +346,7 @@ export class StudentAuthService {
     });
 
     const now = new Date();
-    let endsAt: string | undefined;
-    if (sessionWithPaper.studentId) {
-      const activeSlot = await this.examRouter.findActiveSlotForSession(session.id);
-      if (activeSlot?.scheduledEnd) {
-        endsAt = new Date(activeSlot.scheduledEnd).toISOString();
-      } else if (sessionWithPaper.subjectCode) {
-        const slots = await this.examRouter.listSubjectSlots(
-          sessionWithPaper.studentId,
-          sessionWithPaper.examSessionId,
-        );
-        const slot = slots.find((s) => s.subjectCode === sessionWithPaper.subjectCode);
-        if (slot?.scheduledEnd) endsAt = new Date(slot.scheduledEnd).toISOString();
-      }
-    }
-    if (!endsAt && examSession.startAt) {
-      const durationMin = (template?.durationMin ?? examSession.durationMin) + session.timeExtensionMin;
-      const end = new Date(examSession.startAt);
-      end.setMinutes(end.getMinutes() + durationMin);
-      endsAt = end.toISOString();
-    }
+    const endsAt = this.computeExamEndsAt(sessionWithPaper, template, examSession);
 
     return {
       sessionId: session.id,
@@ -279,6 +356,8 @@ export class StudentAuthService {
       sessionName: examSession.name,
       questions,
       serverNow: now.toISOString(),
+      examStarted: !!sessionWithPaper.examStartedAt,
+      examStartedAt: sessionWithPaper.examStartedAt?.toISOString(),
       endsAt,
       sbd: session.sbd,
       examAccount: session.examAccount,

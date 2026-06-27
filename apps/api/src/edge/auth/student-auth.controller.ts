@@ -50,6 +50,12 @@ export class StudentAuthController {
     return this.authService.login(account, dto.pin, dto.examSessionId, this.getClientIp(req));
   }
 
+  @Post('start-exam')
+  @UseGuards(StudentAuthGuard)
+  async startExam(@Req() req: AuthRequest) {
+    return this.authService.startExam(req.studentSession, this.getClientIp(req));
+  }
+
   @Get('exam')
   @UseGuards(StudentAuthGuard)
   async getExam(@Req() req: AuthRequest) {

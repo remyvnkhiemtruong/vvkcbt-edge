@@ -12,8 +12,11 @@ interface Question {
   clusterSubtype?: string;
   content: {
     stem?: string;
+    stemAfter?: string;
+    sentences?: string[];
     passage?: string;
     title?: string;
+    instruction?: string;
     body?: string;
     options?: string[];
     statements?: string[];
@@ -56,6 +59,8 @@ export function QuestionRenderer({
   const disabled = readOnly;
   const codeBlocks = content.codeBlocks;
   const codeDisplay = content.codeDisplay;
+  const hasCode = !!codeBlocks?.length;
+  const showStemBlock = type !== 'cluster_mcq' && !hideStem;
 
   return (
     <div className="question" onClick={onClick}>
@@ -64,23 +69,31 @@ export function QuestionRenderer({
           <RichTextContent content={passageText} />
         </div>
       )}
-      {codeBlocks?.length ? (
+      {showStemBlock && renderStem(content.stem) && (
+        <div className="stem">{renderStem(content.stem)}</div>
+      )}
+      {hasCode ? (
         <InformaticsCodeRenderer codeBlocks={codeBlocks} codeDisplay={codeDisplay} />
       ) : null}
-      <div className="stem">
-        {type !== 'cluster_mcq' && !hideStem ? renderStem(content.stem) : null}
-      </div>
+      {showStemBlock && content.stemAfter ? (
+        <div className="stem stem-after-code">
+          <RichTextContent content={content.stemAfter} />
+        </div>
+      ) : null}
 
       {type === 'cluster_mcq' && content.options && (
         <ClusterSubtypeRenderer
           subtype={(content.subtype as string) || question.clusterSubtype}
+          instruction={hideClusterPassage ? undefined : content.instruction}
           passage={hideClusterPassage ? undefined : passageText}
+          sentences={content.sentences}
           stem={content.stem}
           options={content.options}
           answer={answer}
           onChange={onChange}
           questionId={question.id}
           readOnly={disabled}
+          hideSharedContext={hideClusterPassage}
         />
       )}
 

@@ -1,5 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { KaTeXBlock } from './KaTeXBlock';
+import { SyntaxHighlightedCode } from './SyntaxHighlightedCode';
+import { highlightCodeSource, normalizeHighlightLanguage } from '../utils/highlight-code';
 import { INLINE_TOKEN_RE } from '../utils/rich-text-parser';
 
 const FENCED_CODE_RE = /```(\w+)?\n?([\s\S]*?)```/g;
@@ -81,11 +83,14 @@ function renderTextBlock(text: string, keyPrefix: string) {
 }
 
 function renderFencedCode(lang: string | undefined, source: string, key: string) {
-  const language = lang?.toLowerCase() ?? '';
+  const language = normalizeHighlightLanguage(lang);
   return (
-    <pre key={key} className={`rich-code-block rich-code-block--${language || 'plain'}`}>
-      <code className={language ? `language-${language}` : undefined}>{source.replace(/\n$/, '')}</code>
-    </pre>
+    <SyntaxHighlightedCode
+      key={key}
+      source={source}
+      language={language}
+      className={`rich-code-block rich-code-block--${language || 'plain'}`}
+    />
   );
 }
 
@@ -112,7 +117,7 @@ export function RichTextContent({ content, className }: Props) {
         </span>,
       );
     }
-    blocks.push(renderFencedCode(match[2], match[3] ?? '', `c${blockIdx++}`));
+    blocks.push(renderFencedCode(match[1], match[2] ?? '', `c${blockIdx++}`));
     lastIndex = match.index + match[0].length;
   }
 
@@ -169,10 +174,10 @@ export function richTextToHtml(content: string): string {
           .join('<br/>'),
       );
     }
-    const lang = match[2] ?? '';
-    const src = escape(match[3] ?? '').replace(/\n$/, '');
+    const lang = normalizeHighlightLanguage(match[1]) ?? '';
+    const { html } = highlightCodeSource(match[2] ?? '', lang);
     parts.push(
-      `<pre class="rich-code-block rich-code-block--${lang || 'plain'}"><code class="language-${lang}">${src}</code></pre>`,
+      `<pre class="rich-code-block rich-code-block--${lang || 'plain'}"><code class="hljs language-${lang}">${html}</code></pre>`,
     );
     lastIndex = match.index + match[0].length;
   }

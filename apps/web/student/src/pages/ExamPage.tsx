@@ -16,7 +16,6 @@ import {
   type ExamUiMode,
   ApiStatusBanner,
 } from '@shared/index';
-import { patchInformaticsAnswers } from '@vnu/shared-types';
 import { getStudentSocket } from '../hooks/useStudentSocket';
 import { useExamStore } from '../store';
 import { studentApi } from '../api';
@@ -65,6 +64,10 @@ export default function ExamPage() {
 
   const loadExam = useCallback(async () => {
     const data = await studentApi.getExam();
+    if (!data.examStarted) {
+      useExamStore.getState().setRulesAccepted(false);
+      return;
+    }
     setExam(data);
     const durationMin = (data.rules as { durationMin?: number })?.durationMin ?? 90;
     const total = durationMin * 60;
@@ -120,7 +123,7 @@ export default function ExamPage() {
   }, [sessionId, setLocked, loadExam, confirmSubmitExam]);
 
   useEffect(() => {
-    if (locked || !exam) return;
+    if (locked || !exam || !exam.examStarted) return;
     const sync = setInterval(() => {
       studentApi
         .syncExam()
@@ -145,7 +148,7 @@ export default function ExamPage() {
   }, [locked, exam]);
 
   useEffect(() => {
-    if (remainingSec === 0 && exam && !locked) triggerAutoSubmit();
+    if (remainingSec === 0 && exam?.examStarted && !locked) triggerAutoSubmit();
   }, [remainingSec, exam, locked, triggerAutoSubmit]);
 
   useEffect(() => {
@@ -166,13 +169,11 @@ export default function ExamPage() {
   );
   const answeredStats = useMemo(() => countAnswered(questions, answers), [questions, answers]);
 
-  const subjectCode = (exam?.subject as string) || '';
   const handleAnswerChange = useCallback(
     (questionId: string, value: unknown) => {
-      const next = patchInformaticsAnswers(questions, answers, questionId, value, subjectCode);
-      setAnswers(next);
+      setAnswer(questionId, value);
     },
-    [questions, answers, subjectCode, setAnswers],
+    [setAnswer],
   );
 
   const scrollToQuestion = useCallback((idx: number) => {
@@ -361,11 +362,7 @@ export default function ExamPage() {
       <header className="exam-topbar">
         <div className="exam-topbar__left">
           <div className="exam-topbar__brand">
-            <CbtBrandLogo size={40} logoUrl="/student/branding/logo.png" />
-            <div className="exam-topbar__subject-wrap">
-              <span className="exam-topbar__subject">{vi.exam.headerDept}</span>
-              <span className="exam-topbar__school">{vi.exam.headerSchool}</span>
-            </div>
+            <CbtBrandLogo size={40} />
           </div>
         </div>
 

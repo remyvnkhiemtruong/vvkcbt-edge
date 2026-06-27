@@ -5,7 +5,10 @@
 .student-login__feature h1 { color: var(--cbt-primary); font-size: 1.25rem; }
 .student-login__feature p { color: var(--cbt-text-muted); font-size: 0.9rem; }
 .student-login__window { max-width: 520px; margin: 0 auto; border-radius: var(--cbt-radius); overflow: hidden; box-shadow: var(--cbt-shadow); border: 1px solid var(--cbt-border); }
-.student-login__topbar { display: flex; justify-content: space-between; padding: 0.85rem 1rem; background: var(--cbt-navy); color: #fff; font-size: 0.8rem; font-weight: 600; }
+.student-login__topbar { display: flex; align-items: center; justify-content: flex-start; padding: 0.85rem 1rem; background: var(--cbt-navy); color: #fff; font-size: 0.8rem; font-weight: 600; }
+.student-login__topbar-title { text-align: left; white-space: nowrap; }
+.student-login__brand { margin-bottom: 1rem; display: flex; justify-content: center; }
+.student-login__card h2 { margin-top: 0; }
 .student-login__body { background: var(--cbt-bg); padding: 2rem 1.5rem; }
 .student-login__card { background: #fff; padding: 2rem; border-radius: var(--cbt-radius); border: 1px solid var(--cbt-border); }
 .student-login__card h2 { color: var(--cbt-primary); text-align: center; margin-bottom: 1.5rem; }
@@ -14,6 +17,7 @@
 .student-login__footer { display: flex; justify-content: space-between; padding: 0.65rem 1rem; font-size: 0.75rem; color: var(--cbt-text-muted); background: #fafafa; border-top: 1px solid var(--cbt-border); }
 
 .rules-page, .slots-page { min-height: 100vh; padding: 1.5rem; max-width: 720px; margin: 0 auto; }
+.rules-page__brand { margin-bottom: 1rem; display: flex; justify-content: center; }
 .rules-page__feature, .slots-page__feature { text-align: center; margin-bottom: 1rem; }
 .rules-page__feature h1, .slots-page__feature h1 { color: var(--cbt-primary); font-size: 1.15rem; }
 .rules-check { display: flex; gap: 0.5rem; margin: 1rem 0; align-items: center; }
@@ -34,6 +38,16 @@
 }
 
 .result-page { max-width: 600px; margin: 4rem auto; text-align: center; background: #fff; padding: 2rem; border-radius: 12px; }
+.result-page__branch-warning {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  color: #664d03;
+  font-size: 0.95rem;
+  text-align: left;
+}
 .result-page__actions {
   margin-top: 1rem;
   display: flex;

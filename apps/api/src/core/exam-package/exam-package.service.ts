@@ -15,6 +15,7 @@ import {
   TN_THPT_SUBJECTS,
   DEFAULT_SCHOOL_NAME,
   DEFAULT_SCHOOL_CODE,
+  StudentSessionStatus,
   ExamPackageExportState,
   ExamPackageImportResult,
   ExamPackageSessionConfig,
@@ -539,9 +540,10 @@ export class ExamPackageService {
     let slotsRemoved = 0;
 
     for (const row of rows) {
-      if (row.subjects.length !== 1) {
+      const registered = row.subjects.filter((code) => importedSubjectCodes.has(code));
+      if (!registered.length) {
         throw new BadRequestException(
-          `HS ${row.studentCode}: mỗi thí sinh chỉ được 1 môn trong ca thi`,
+          `HS ${row.studentCode}: không đăng ký môn nào trong gói ca thi`,
         );
       }
 
@@ -576,7 +578,7 @@ export class ExamPackageService {
       const existingSlots = await slotRepo.find({ where: { studentId: student.id, examSessionId } });
       const bySubject = new Map(existingSlots.map((s) => [s.subjectCode, s]));
 
-      for (const code of row.subjects) {
+      for (const code of registered) {
         const sched = scheduleMap.get(code);
         if (!sched) continue;
         const start = this.combineDateTime(sched.examDate, sched.startTime);
@@ -651,43 +653,69 @@ export class ExamPackageService {
     const sessionRepo = manager.getRepository(StudentSession);
     const paperRepo = manager.getRepository(ExamPaper);
 
+    const byAccount = new Map<string, ExamPackageCredentialRow[]>();
     for (const cred of credentials) {
       if (!cred.examAccount?.trim() || !cred.pin?.trim() || !cred.sbd?.trim()) {
         throw new BadRequestException(`Credential thiếu tài khoản/PIN/SBD: ${cred.fullName}`);
       }
       const account = cred.examAccount.trim();
+      const list = byAccount.get(account) ?? [];
+      list.push(cred);
+      byAccount.set(account, list);
+    }
+
+    for (const [account, creds] of byAccount) {
+      const primary = creds[0];
       if (!/^\d{6}$/.test(account)) {
-        throw new BadRequestException(`Tài khoản phải 6 chữ số: ${account} (${cred.fullName})`);
+        throw new BadRequestException(`Tài khoản phải 6 chữ số: ${account} (${primary.fullName})`);
       }
-      const pin = cred.pin.trim();
+      const pin = primary.pin.trim();
       if (!/^\d{8}$/.test(pin)) {
-        throw new BadRequestException(`PIN phải 8 chữ số: ${cred.fullName} (${cred.subjectCode})`);
+        throw new BadRequestException(`PIN phải 8 chữ số: ${primary.fullName}`);
       }
-      const student = await studentRepo.findOne({ where: { studentCode: cred.studentCode } });
+      for (const c of creds) {
+        if (c.pin.trim() !== pin) {
+          throw new BadRequestException(`PIN không khớp cho tài khoản ${account}`);
+        }
+        if (c.studentCode !== primary.studentCode) {
+          throw new BadRequestException(`Tài khoản ${account} gán cho nhiều mã HS khác nhau`);
+        }
+      }
+
+      const student = await studentRepo.findOne({ where: { studentCode: primary.studentCode } });
       if (!student) {
-        throw new BadRequestException(`Không tìm thấy HS ${cred.studentCode} cho credential ${cred.examAccount}`);
+        throw new BadRequestException(`Không tìm thấy HS ${primary.studentCode} cho ${account}`);
       }
-      if (cred.labRoom?.trim()) {
-        await studentRepo.update(student.id, { labRoom: cred.labRoom.trim() });
+      if (primary.labRoom?.trim()) {
+        await studentRepo.update(student.id, { labRoom: primary.labRoom.trim() });
       }
-      const paper = await paperRepo.findOne({
-        where: { examSessionId, subject: cred.subjectCode },
-      });
-      if (!paper) {
-        throw new BadRequestException(`Thiếu đề môn ${cred.subjectCode} cho ${cred.examAccount}`);
+
+      const subjectCodes = [...new Set(creds.map((c) => c.subjectCode))];
+      let subjectCode: string | undefined;
+      let examPaperId: string | undefined;
+      if (subjectCodes.length === 1) {
+        subjectCode = subjectCodes[0];
+        const paper = await paperRepo.findOne({
+          where: { examSessionId, subject: subjectCode },
+        });
+        if (!paper) {
+          throw new BadRequestException(`Thiếu đề môn ${subjectCode} cho ${account}`);
+        }
+        examPaperId = paper.id;
       }
-      const pinHash = await bcrypt.hash(cred.pin.trim(), 10);
+
+      const pinHash = await bcrypt.hash(pin, 10);
       const existing = await sessionRepo.findOne({ where: { examAccount: account } });
       if (existing && existing.studentId && existing.studentId !== student.id) {
         throw new BadRequestException(`Tài khoản ${account} đã được gán cho thí sinh khác`);
       }
       const payload = {
-        sbd: cred.sbd.trim(),
+        sbd: primary.sbd.trim(),
         pinHash,
         studentId: student.id,
         examSessionId,
-        subjectCode: cred.subjectCode,
-        examPaperId: paper.id,
+        subjectCode,
+        examPaperId,
         examAccount: account,
       };
       if (existing) {
@@ -696,7 +724,7 @@ export class ExamPackageService {
         await sessionRepo.save(
           sessionRepo.create({
             ...payload,
-            status: 'NOT_LOGGED_IN' as never,
+            status: StudentSessionStatus.NOT_LOGGED_IN,
             sessionVersion: 1,
           }),
         );
@@ -852,17 +880,23 @@ export class ExamPackageService {
       const students = JSON.parse(
         fs.readFileSync(studentsPath, 'utf8'),
       ) as ExamPackageStudentRow[];
+      const allowedSubjects = new Set(subjects.map((s) => s.code));
       for (const row of students) {
-        if (row.subjects.length !== 1) {
-          throw new BadRequestException(
-            `HS ${row.studentCode}: mỗi thí sinh chỉ được 1 môn trong ca thi`,
-          );
+        if (!row.subjects?.length) {
+          throw new BadRequestException(`HS ${row.studentCode}: chưa đăng ký môn thi`);
+        }
+        for (const code of row.subjects) {
+          if (!allowedSubjects.has(code)) {
+            throw new BadRequestException(
+              `HS ${row.studentCode}: môn ${code} không có trong subjects.json`,
+            );
+          }
         }
         if (scope === 'single_subject') {
           const subjectCode = this.resolveImportSubjectCode(manifest, subjects);
-          if (row.subjects[0] !== subjectCode) {
+          if (row.subjects.length !== 1 || row.subjects[0] !== subjectCode) {
             throw new BadRequestException(
-              `HS ${row.studentCode}: môn ${row.subjects[0]} không khớp ${subjectCode}`,
+              `HS ${row.studentCode}: single_subject — HS phải đúng một môn ${subjectCode}`,
             );
           }
         }

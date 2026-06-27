@@ -203,7 +203,10 @@ export class ExamRouterService {
 
   async findActiveSlotForSession(studentSessionId: string) {
     return this.slotRepo.findOne({
-      where: { studentSessionId, status: 'open' as never },
+      where: [
+        { studentSessionId, status: 'open' as never },
+        { studentSessionId, status: 'locked' as never },
+      ],
     });
   }
 

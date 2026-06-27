@@ -1,51 +1,46 @@
-import { DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
-
-const env =
-  typeof import.meta !== 'undefined'
-    ? (import.meta as { env?: Record<string, string | undefined> }).env
-    : undefined;
-
-const SO_GD = env?.VITE_SO_GD_NAME || 'SỞ GIÁO DỤC VÀ ĐÀO TẠO TỈNH CÀ MAU';
-const SCHOOL_BRAND = env?.VITE_SCHOOL_BRAND_NAME || DEFAULT_SCHOOL_NAME;
+import { useMemo, useState } from 'react';
+import { SO_GD_DISPLAY, SCHOOL_BRAND_DISPLAY, resolveSchoolLogoUrl } from '../i18n/brand';
 
 export function CbtBrandLogo({
   size = 48,
   variant = 'header',
   showSchoolName = false,
-  logoUrl = '/student/branding/logo.png',
+  logoUrl,
+  align = 'left',
+  layout = 'inline',
 }: {
   size?: number;
   variant?: 'login' | 'header';
   showSchoolName?: boolean;
   logoUrl?: string;
+  align?: 'left' | 'center';
+  /** inline: logo cạnh chữ; stack: logo trên, Sở/Trường dưới (dùng trên form đăng nhập) */
+  layout?: 'inline' | 'stack';
 }) {
-  const isLogin = variant === 'login';
-  const px = isLogin ? Math.max(size, 80) : size;
+  const px = variant === 'login' ? Math.max(size, 64) : size;
+  const showText = showSchoolName;
+  const src = useMemo(() => resolveSchoolLogoUrl(logoUrl), [logoUrl]);
+  const [failed, setFailed] = useState(false);
 
   return (
     <div
-      className={`cbt-brand-logo cbt-brand-logo--${variant}`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: isLogin ? '0.65rem' : '0.5rem',
-        ...(isLogin ? { flexDirection: 'column', textAlign: 'center' } : {}),
-      }}
+      className={`cbt-brand-logo cbt-brand-logo--${variant} cbt-brand-logo--align-${align} cbt-brand-logo--${layout}`}
     >
-      <img
-        src={logoUrl}
-        alt={SCHOOL_BRAND}
-        width={px}
-        height={px}
-        style={{ objectFit: 'contain', maxHeight: px }}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
-      />
-      {showSchoolName && (
+      {!failed && (
+        <img
+          src={src}
+          alt={SCHOOL_BRAND_DISPLAY}
+          width={px}
+          height={px}
+          className="cbt-brand-logo__img"
+          style={{ objectFit: 'contain', width: px, height: px, maxHeight: px, flexShrink: 0 }}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {showText && (
         <div className="cbt-brand-logo__text">
-          <div className="cbt-brand-logo__sogd">{SO_GD}</div>
-          <div className="cbt-brand-logo__school">{SCHOOL_BRAND}</div>
+          <div className="cbt-brand-logo__dept">{SO_GD_DISPLAY}</div>
+          <div className="cbt-brand-logo__school">{SCHOOL_BRAND_DISPLAY}</div>
         </div>
       )}
     </div>

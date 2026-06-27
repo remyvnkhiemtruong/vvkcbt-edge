@@ -193,8 +193,8 @@
 
 .exam-topbar__subject {
   font-weight: 700;
-  font-size: 0.88rem;
-  letter-spacing: 0.02em;
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
   color: var(--exam-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -202,10 +202,8 @@
 }
 
 .exam-topbar__school {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font-size: 0.68rem;
+  font-weight: 600;
   color: var(--exam-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -656,6 +654,5 @@
   .exam-topbar__center { order: 3; }
   .exam-topbar__right { justify-content: flex-start; }
   .exam-answered-count { display: none; }
-  .exam-topbar__subject { font-size: 0.8rem; }
-  .exam-topbar__school { font-size: 0.65rem; }
+  .exam-topbar__school { display: none; }
 }

@@ -46,14 +46,19 @@ export function ScoreboardOverlay({
 }) {
   const [busy, setBusy] = useState<'pdf' | 'xlsx' | null>(null);
   const [msg, setMsg] = useState('');
+  const hasSubject = data.subjectCode?.trim().length > 0;
 
   const download = async (format: 'pdf' | 'xlsx') => {
+    if (!hasSubject) {
+      setMsg('Thiếu mã môn thi — không thể tải biên bản.');
+      return;
+    }
     setBusy(format);
     setMsg('');
     try {
       const sigs = loadSigs();
       const params = new URLSearchParams({
-        subjectCode: data.subjectCode,
+        subjectCode: data.subjectCode.trim(),
         room: data.room,
         format,
         proctor1Name: sigs.proctor1Name ?? '',
@@ -104,10 +109,10 @@ export function ScoreboardOverlay({
             </p>
           </div>
           <div className="scoreboard-overlay__actions">
-            <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => download('pdf')} disabled={!!busy}>
+            <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => download('pdf')} disabled={!!busy || !hasSubject}>
               {busy === 'pdf' ? 'Đang tải…' : 'Tải PDF'}
             </button>
-            <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => download('xlsx')} disabled={!!busy}>
+            <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => download('xlsx')} disabled={!!busy || !hasSubject}>
               {busy === 'xlsx' ? 'Đang tải…' : 'Tải Excel'}
             </button>
             <button type="button" className="cbt-btn cbt-btn-primary" onClick={onClose}>

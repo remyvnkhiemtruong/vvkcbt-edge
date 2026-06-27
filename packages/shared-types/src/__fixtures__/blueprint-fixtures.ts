@@ -92,11 +92,7 @@ function buildStandardPaper(subject: TnThptSubjectCode): ExamPackagePaperRow {
       if (partCfg.type === 'mcq') {
         questions.push(mcq(id, subject, partKey, partCfg.score_per_item ?? 0.25));
       } else if (partCfg.type === 'true_false') {
-        let tfScore = 1;
-        if (subject === 'INFORMATICS') {
-          tfScore = 4 / 6;
-        }
-        questions.push(tf(id, subject, partKey, tfScore));
+        questions.push(tf(id, subject, partKey, 1));
       } else if (partCfg.type === 'short_answer') {
         questions.push(short(id, subject, partKey, partCfg.score_per_item ?? 0.25));
       }
@@ -121,6 +117,7 @@ export const BLUEPRINT_FIXTURES: Record<TnThptSubjectCode, ExamPackagePaperRow> 
   GEOGRAPHY: buildStandardPaper('GEOGRAPHY'),
   HISTORY: buildStandardPaper('HISTORY'),
   CIVIC_EDU: buildStandardPaper('CIVIC_EDU'),
-  TECHNOLOGY: buildStandardPaper('TECHNOLOGY'),
+  TECH_INDUSTRY: buildStandardPaper('TECH_INDUSTRY'),
+  TECH_AGRICULTURE: buildStandardPaper('TECH_AGRICULTURE'),
   INFORMATICS: buildStandardPaper('INFORMATICS'),
 };

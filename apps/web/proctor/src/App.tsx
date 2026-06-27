@@ -51,6 +51,26 @@ interface RoomContext {
 const API = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'vnu_proctor_exam_session';
 
+function uniqueSubjectCodesFromGrid(grid: GridItem[]): string[] {
+  const codes = new Set<string>();
+  for (const item of grid) {
+    const c = item.subjectCode?.trim();
+    if (c) codes.add(c);
+  }
+  return [...codes].sort();
+}
+
+function uniqueLabRoomsFromGrid(grid: GridItem[]): string[] {
+  const rooms = new Set<string>();
+  for (const item of grid) {
+    const r = item.labRoom?.trim();
+    if (r) rooms.add(r);
+  }
+  return [...rooms].sort();
+}
+
+const proctorBrandHeader = <CbtBrandLogo variant="header" size={40} />;
+
 function ProctorLogin({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -76,6 +96,15 @@ function ProctorLogin({ onLogin }: { onLogin: () => void }) {
     <ApiStatusBanner />
     <CbtPageShell headerTitle={vi.proctor.title} darkBody>
       <form className="proctor-login" onSubmit={handleSubmit}>
+        <div className="proctor-login__brand">
+          <CbtBrandLogo
+            variant="login"
+            size={72}
+            showSchoolName
+            layout="stack"
+            align="left"
+          />
+        </div>
         <h2>Đăng nhập giám thị</h2>
         {error && <div className="proctor-login-error">{error}</div>}
         <label>
@@ -95,6 +124,10 @@ function ProctorLogin({ onLogin }: { onLogin: () => void }) {
       </form>
       <style>{`
         .proctor-login { max-width: 360px; margin: 2rem auto; display: flex; flex-direction: column; gap: 0.75rem; color: #fff; }
+        .proctor-login__brand { margin-bottom: 0.25rem; }
+        .proctor-login h2 { margin: 0 0 0.25rem; }
+        .proctor-login .cbt-brand-logo__dept { color: #94a3b8; }
+        .proctor-login .cbt-brand-logo__school { color: #f1f5f9; }
         .proctor-login label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
         .proctor-login-error { background: #fef2f2; color: #b91c1c; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; }
       `}</style>
@@ -530,6 +563,21 @@ export default function App() {
       });
   }, [examSessionId, authed, token]);
 
+  useEffect(() => {
+    if (sessionSubjectCodes.length > 0) return;
+    const fromGrid = uniqueSubjectCodesFromGrid(grid);
+    if (fromGrid.length === 0) return;
+    setSessionSubjectCodes(fromGrid);
+    setSelectedSubjectCode((prev) => (prev && fromGrid.includes(prev) ? prev : fromGrid[0]));
+  }, [grid, sessionSubjectCodes.length]);
+
+  useEffect(() => {
+    if (mode !== 'roomsheet' && mode !== 'endsession') return;
+    if (selectedSubjectCode.trim()) return;
+    const codes = sessionSubjectCodes.length > 0 ? sessionSubjectCodes : uniqueSubjectCodesFromGrid(grid);
+    if (codes[0]) setSelectedSubjectCode(codes[0]);
+  }, [mode, selectedSubjectCode, sessionSubjectCodes, grid]);
+
   useProctorSocket({
     token,
     examSessionId,
@@ -605,7 +653,7 @@ export default function App() {
 
   if (sessionChecking) {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
+      <CbtPageShell headerTitle={vi.proctor.title} headerLeft={proctorBrandHeader} darkBody wide>
         <p className="admin-hint" style={{ padding: '2rem', color: '#e2e8f0' }}>
           Đang xác minh phiên đăng nhập…
         </p>
@@ -650,7 +698,7 @@ export default function App() {
 
   if (mode === 'prep' || !examSessionId) {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
+      <CbtPageShell headerTitle={vi.proctor.title} headerLeft={proctorBrandHeader} darkBody wide>
         <div className="proctor-toolbar">
           <button type="button" className="cbt-btn cbt-btn-outline" onClick={handleLogout}>
             Đăng xuất
@@ -685,7 +733,7 @@ export default function App() {
 
   if (mode !== 'monitor') {
     return (
-      <CbtPageShell headerTitle={vi.proctor.title} darkBody wide>
+      <CbtPageShell headerTitle={vi.proctor.title} headerLeft={proctorBrandHeader} darkBody wide>
         <div className="proctor-toolbar proctor-mode-nav">
           {modeNav('monitor', 'Giám sát')}
           {modeNav('report', 'Báo cáo')}
@@ -708,6 +756,7 @@ export default function App() {
             subjectCode={selectedSubjectCode}
             onSubjectCodeChange={setSelectedSubjectCode}
             defaultRoom={roomName}
+            labRooms={uniqueLabRoomsFromGrid(grid)}
           />
         )}
         {mode === 'endsession' && (
@@ -754,7 +803,7 @@ export default function App() {
     <CbtPageShell
       featureTitle={production ? undefined : 'TÍNH NĂNG 10. BẢNG ĐIỀU KHIỂN GIÁM THỊ'}
       headerTitle={vi.proctor.title}
-      headerLeft={<CbtBrandLogo size={40} logoUrl="/proctor/branding/logo.png" />}
+      headerLeft={proctorBrandHeader}
       headerRight={`${roomName} | Thí sinh: ${grid.length}`}
       pageNumber={production ? undefined : 10}
       darkBody

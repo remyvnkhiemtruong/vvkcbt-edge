@@ -2,7 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   enrichQuestionsWithPart,
+  orderEnglishClusterQuestions,
   orderQuestionsByPart,
+  orderQuestionsForExam,
   seededShuffle,
 } from './question-order';
 import { getDefaultStructure, TN_THPT_SUBJECTS } from './tn-thpt-catalog';
@@ -57,10 +59,60 @@ describe('question-order', () => {
         type: structure!.parts[part].type,
         part,
       }));
-      const ordered = orderQuestionsByPart(questions, partOrder, `seed-${meta.code}`, {
+      const ordered = orderQuestionsForExam(meta.code, questions, partOrder, `seed-${meta.code}`, {
         shuffleWithinPart: structure!.shuffleWithinPart ?? true,
       });
       assert.equal(ordered.length, questions.length, meta.code);
     }
+  });
+
+  it('orderEnglishClusterQuestions shuffles cluster blocks only', () => {
+    const questions = [
+      { id: 'n1', clusterId: 'c-notice', clusterOrder: 1, clusterSubtype: 'fill_notice' },
+      { id: 'n2', clusterId: 'c-notice', clusterOrder: 2, clusterSubtype: 'fill_notice' },
+      { id: 'r1', clusterId: 'c-read', clusterOrder: 1, clusterSubtype: 'reading_8' },
+      { id: 'r2', clusterId: 'c-read', clusterOrder: 2, clusterSubtype: 'reading_8' },
+    ];
+    const ordered = orderEnglishClusterQuestions(questions, 'student-en');
+    assert.equal(ordered.length, 4);
+    const noticeIdx = ordered.map((q) => q.id).indexOf('n1');
+    const readIdx = ordered.map((q) => q.id).indexOf('r1');
+    assert.notEqual(noticeIdx, -1);
+    assert.notEqual(readIdx, -1);
+    assert.ok(
+      (noticeIdx < readIdx && ordered[noticeIdx + 1]?.id === 'n2') ||
+        (readIdx < noticeIdx && ordered[readIdx + 1]?.id === 'r2'),
+    );
+    const noticeBlock = ordered.filter((q) => q.clusterId === 'c-notice').map((q) => q.id);
+    assert.deepEqual(noticeBlock, ['n1', 'n2']);
+    const readBlock = ordered.filter((q) => q.clusterId === 'c-read').map((q) => q.id);
+    assert.deepEqual(readBlock, ['r1', 'r2']);
+  });
+
+  it('orderEnglishClusterQuestions shuffles questions in reorder cluster only', () => {
+    const questions = [
+      { id: 'o1', clusterId: 'c-reorder', clusterOrder: 1, clusterSubtype: 'reorder' },
+      { id: 'o2', clusterId: 'c-reorder', clusterOrder: 2, clusterSubtype: 'reorder' },
+      { id: 'o3', clusterId: 'c-reorder', clusterOrder: 3, clusterSubtype: 'reorder' },
+      { id: 'g1', clusterId: 'c-gap', clusterOrder: 1, clusterSubtype: 'fill_gap' },
+      { id: 'g2', clusterId: 'c-gap', clusterOrder: 2, clusterSubtype: 'fill_gap' },
+    ];
+    const ordered = orderEnglishClusterQuestions(questions, 'seed-reorder');
+    const reorderIds = ordered.filter((q) => q.clusterId === 'c-reorder').map((q) => q.id);
+    const gapIds = ordered.filter((q) => q.clusterId === 'c-gap').map((q) => q.id);
+    assert.deepEqual(new Set(reorderIds), new Set(['o1', 'o2', 'o3']));
+    assert.deepEqual(gapIds, ['g1', 'g2']);
+    assert.notDeepEqual(reorderIds, ['o1', 'o2', 'o3']);
+  });
+
+  it('orderQuestionsForExam uses English cluster rules for ENGLISH', () => {
+    const questions = [
+      { id: 'a', clusterId: 'c1', clusterOrder: 1, clusterSubtype: 'reading_8' },
+      { id: 'b', clusterId: 'c2', clusterOrder: 1, clusterSubtype: 'reading_10' },
+    ];
+    const a = orderQuestionsForExam('ENGLISH', questions, ['part1_cluster_mcq'], 'x');
+    const b = orderQuestionsForExam('ENGLISH', questions, ['part1_cluster_mcq'], 'x');
+    assert.deepEqual(a, b);
+    assert.deepEqual(new Set(a.map((q) => q.id)), new Set(['a', 'b']));
   });
 });

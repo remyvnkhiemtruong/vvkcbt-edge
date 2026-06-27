@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CbtCard, vi, isProductionUi, isRunningInSEB, requiresSebLock } from '@shared/index';
+import { CbtCard, CbtBrandLogo, vi, isProductionUi, isRunningInSEB, requiresSebLock, translateApiError } from '@shared/index';
+import { studentApi } from '../api';
 
 interface Props {
   onAccepted: () => void;
@@ -9,7 +10,8 @@ const RULES = [
   'Thí sinh không được rời khỏi màn hình thi trong quá trình làm bài.',
   'Không sử dụng tài liệu, thiết bị điện tử hoặc trao đổi với người khác.',
   'Hệ thống tự động lưu bài làm mỗi 3 giây; vi phạm focus quá 3 lần sẽ bị báo giám thị.',
-  'Khi hết giờ, bài thi sẽ được nộp tự động.',
+  'Khi hết giờ làm bài, bài thi sẽ được nộp tự động.',
+  'Đồng hồ làm bài chỉ chạy sau khi bạn bấm «Bắt đầu làm bài» — có thể làm hết thời gian quy định kể cả khi đã quá giờ kết thúc ca (nếu đã bắt đầu trong ca).',
 ];
 
 function DiagnosticGate({ onPass }: { onPass: () => void }) {
@@ -115,17 +117,28 @@ function DiagnosticGate({ onPass }: { onPass: () => void }) {
 export default function RulesPage({ onAccepted }: Props) {
   const [checked, setChecked] = useState(false);
   const [diagOk, setDiagOk] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState('');
   const production = isProductionUi();
 
   const handleStart = async () => {
-    if (!checked || !diagOk) return;
-    onAccepted();
-    if (!isRunningInSEB()) {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch {
-        /* optional */
+    if (!checked || !diagOk || starting) return;
+    setStarting(true);
+    setStartError('');
+    try {
+      await studentApi.startExam();
+      onAccepted();
+      if (!isRunningInSEB()) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch {
+          /* optional */
+        }
       }
+    } catch (err) {
+      setStartError(err instanceof Error ? translateApiError(err.message) : 'Không bắt đầu được bài thi');
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -138,6 +151,15 @@ export default function RulesPage({ onAccepted }: Props) {
         </div>
       )}
       <CbtCard>
+        <div className="rules-page__brand">
+          <CbtBrandLogo
+            variant="login"
+            size={72}
+            showSchoolName
+            layout="stack"
+            align="center"
+          />
+        </div>
         <h1 style={{ color: 'var(--cbt-primary)', textAlign: 'center' }}>{vi.rules.title}</h1>
         <ul style={{ lineHeight: 1.7, margin: '1rem 0' }}>
           {RULES.map((r, i) => (
@@ -155,11 +177,12 @@ export default function RulesPage({ onAccepted }: Props) {
               type="button"
               className="cbt-btn cbt-btn-primary"
               style={{ width: '100%' }}
-              disabled={!checked}
+              disabled={!checked || starting}
               onClick={handleStart}
             >
-              {vi.rules.start}
+              {starting ? 'Đang mở đề…' : vi.rules.start}
             </button>
+            {startError && <p className="cbt-error-text" style={{ marginTop: '0.75rem' }}>{startError}</p>}
           </>
         )}
       </CbtCard>
