@@ -22,11 +22,10 @@ import { ProctorAction } from '../../database/entities/proctor-action.entity';
 import { StudentSessionStatus, ProctorActionType, AuditEventType, TN_THPT_SUBJECTS } from '@vnu/shared-types';
 import { AuditService } from '../../shared/audit/audit.service';
 import { StaffRole } from '../../shared/guards/staff-auth.guard';
+import { parseEdgeCorsOrigins } from '../../shared/cors-origins';
 
 function parseWsCorsOrigins(): string[] | boolean {
-  const raw = process.env.EDGE_ORIGINS?.trim();
-  if (!raw) return process.env.NODE_ENV === 'production' ? false : true;
-  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+  return parseEdgeCorsOrigins();
 }
 
 export interface ProctorGridOptions {
@@ -35,6 +34,8 @@ export interface ProctorGridOptions {
 }
 
 const SUBJECT_VI = Object.fromEntries(TN_THPT_SUBJECTS.map((s) => [s.code, s.nameVi]));
+/** Thí sinh không gửi heartbeat trong khoảng này → hiển thị mất mạng (ms). */
+const HEARTBEAT_STALE_MS = 25_000;
 
 @WebSocketGateway({
   namespace: '/proctoring',
@@ -139,15 +140,29 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
     client.join('students:connected');
     if (session?.examSessionId) {
       client.join(`session:${session.examSessionId}`);
+      session.lastHeartbeat = new Date();
+      if (session.status === StudentSessionStatus.OFFLINE) {
+        session.status = StudentSessionStatus.ACTIVE;
+      }
+      await this.sessionRepo.save(session);
+      await this.broadcastGrid(session.examSessionId);
     }
   }
 
   @SubscribeMessage('heartbeat')
-  async heartbeat(client: Socket, data: { sessionId: string }) {
-    await this.sessionRepo.update(data.sessionId, {
+  async heartbeat(client: Socket, _data: { sessionId?: string }) {
+    const payload = this.verifySocketToken(client, ['student']);
+    const sessionId = payload.sessionId;
+    if (!sessionId) return;
+
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) return;
+
+    await this.sessionRepo.update(sessionId, {
       lastHeartbeat: new Date(),
       status: StudentSessionStatus.ACTIVE,
     });
+    await this.broadcastGrid(session.examSessionId);
   }
 
   @SubscribeMessage('help_request')
@@ -320,7 +335,7 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       if (
         status === StudentSessionStatus.ACTIVE &&
         s.lastHeartbeat &&
-        now - new Date(s.lastHeartbeat).getTime() > 10000
+        now - new Date(s.lastHeartbeat).getTime() > HEARTBEAT_STALE_MS
       ) {
         status = StudentSessionStatus.OFFLINE;
       }
@@ -413,7 +428,7 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
 
   @Cron('*/5 * * * * *')
   async checkOfflineStudents() {
-    const threshold = new Date(Date.now() - 10000);
+    const threshold = new Date(Date.now() - HEARTBEAT_STALE_MS);
     const sessions = await this.sessionRepo.find({
       where: {
         status: StudentSessionStatus.ACTIVE,

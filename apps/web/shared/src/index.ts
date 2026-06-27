@@ -15,6 +15,7 @@ export { ClusterSubtypeRenderer, ClusterContextPreview } from './components/Clus
 export { splitPassageGaps, wrapSelection } from './utils/rich-text-parser';
 export type { PassageSegment } from './utils/rich-text-parser';
 export { ExamViewShell } from './components/ExamViewShell';
+export { ExamErrorBoundary } from './components/ExamErrorBoundary';
 export type { ExamUiMode, ExamQuestion, ExamViewShellProps } from './components/ExamViewShell';
 export { ExamQuestionPalette } from './components/ExamQuestionPalette';
 export { ExamThemeToggle } from './components/ExamThemeToggle';
@@ -32,6 +33,9 @@ export {
   isQuestionAnswered,
   countAnswered,
   isReorderClusterRun,
+  shouldUseStemSplit,
+  getVisibleClusterRuns,
+  getExamViewRangeLabel,
   clusterRunHasContext,
 } from './utils/exam-clusters';
 export type { ExamPart, ExamViewGroup, ExamClusterRun } from './utils/exam-clusters';

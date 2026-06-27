@@ -20,6 +20,7 @@ import { StudentSessionStatus, AuditEventType } from '@vnu/shared-types';
 import { AuditService } from '../../shared/audit/audit.service';
 import { IdempotencyInterceptor } from '../../shared/idempotency/idempotency.interceptor';
 import { getClientIpFromRequest } from '../../shared/utils/client-ip';
+import { ProctoringGateway } from '../proctoring/proctoring.gateway';
 
 interface AuthRequest extends Request {
   studentSession: StudentSession;
@@ -32,6 +33,7 @@ export class StudentAuthController {
     private readonly auditService: AuditService,
     @InjectRepository(StudentSession)
     private readonly sessionRepo: Repository<StudentSession>,
+    private readonly proctoringGateway: ProctoringGateway,
   ) {}
 
   private getClientIp(req: Request): string {
@@ -48,6 +50,12 @@ export class StudentAuthController {
     const account = (dto.examAccount ?? dto.sbd ?? '').trim();
     if (!account) throw new BadRequestException('Thiếu tài khoản thi');
     return this.authService.login(account, dto.pin, dto.examSessionId, this.getClientIp(req));
+  }
+
+  @Get('profile')
+  @UseGuards(StudentAuthGuard)
+  async getProfile(@Req() req: AuthRequest) {
+    return this.authService.getProfile(req.studentSession);
   }
 
   @Post('start-exam')
@@ -140,6 +148,7 @@ export class StudentAuthController {
       session.status = StudentSessionStatus.ACTIVE;
     }
     await this.sessionRepo.save(session);
+    void this.proctoringGateway.broadcastGrid(session.examSessionId);
     return { ok: true };
   }
 

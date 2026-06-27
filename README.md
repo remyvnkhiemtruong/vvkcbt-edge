@@ -4,7 +4,7 @@
 
 **Tác giả:** Trương Minh Khiêm
 
-NestJS + React/Vite + PostgreSQL + Socket.io. Triển khai **native** (khuyến nghị) hoặc Docker (tùy chọn).
+NestJS + React/Vite + PostgreSQL + Socket.io. Triển khai **native** (Postgres + Redis + nginx).
 
 | Ứng dụng | Title | Vai trò |
 |----------|-------|---------|
@@ -20,12 +20,32 @@ apps/web/student      CBT — làm bài
 apps/web/proctor      CBT - Viewer — giám sát
 packages/shared-types Scoring + types
 packages/exam-package-kit  Validate/import ZIP
-docker/               Compose production
-scripts/              BAT khởi động, bootstrap, backup
+scripts/              Setup, BAT khởi động, bootstrap, backup
 docs/                 Runbook, native deploy, browser kiosk
 ```
 
-## Khởi chạy ngày thi (native — khuyến nghị)
+## Setup lần đầu
+
+**Windows (máy chủ):**
+
+```
+scripts\setup-windows.bat
+```
+
+Chế độ dev (không build/nginx): `scripts\setup-windows.bat --dev`
+
+**Ubuntu:**
+
+```bash
+sudo bash scripts/setup-linux.sh
+sudo bash scripts/setup-linux.sh --dev
+```
+
+Hoặc: `npm run setup` — in hướng dẫn theo OS.
+
+Chi tiết: [`docs/NATIVE-DEPLOY.md`](docs/NATIVE-DEPLOY.md)
+
+## Khởi chạy ngày thi
 
 **Máy chủ** (Postgres + Redis + API + nginx):
 
@@ -33,21 +53,24 @@ docs/                 Runbook, native deploy, browser kiosk
 scripts\start-edge-server.bat
 ```
 
+(hoặc `scripts\start-proctor-edge.bat` — cùng luồng native)
+
 **Máy giám thị 2 GB** (chỉ trình duyệt):
 
 ```
 scripts\start-proctor-client.bat
 ```
 
-Thiết lập lần đầu: `powershell -File scripts\setup-native.ps1` — xem `docs/NATIVE-DEPLOY.md`.
-
 Thí sinh: Chrome kiosk — `docs/BROWSER-KIOSK.md` · `scripts\student-kiosk.bat <IP>`
 
 ## Development
 
+Yêu cầu: PostgreSQL 16 (+ Redis hoặc `EDGE_LIGHTWEIGHT=true` trong `.env`).
+
 ```bash
-npm install
-cp .env.example .env
+scripts\setup-windows.bat --dev   # Windows
+# hoặc: sudo bash scripts/setup-linux.sh --dev
+
 npm run dev
 ```
 
@@ -59,27 +82,11 @@ npm run dev
 
 **Composer:** repo sibling `vnu-composer` → `npm run dev`
 
-## Docker (tùy chọn)
-
-```
-scripts\start-proctor-edge-docker.bat
-```
-
-Hoặc:
-
-```bash
-npm run build
-docker compose -f docker/docker-compose.yml up --build
-```
-
-- CBT: http://localhost/student/
-- CBT - Viewer: http://localhost/proctor/
-
 ## Quy trình ngày thi
 
 1. **Composer** — soạn ca, môn, câu hỏi, thí sinh → **Xuất ZIP**
 2. **BAT / CBT - Viewer** — import ZIP
-3. **SEB** — thí sinh vào `http://<IP_LAN>/student/`
+3. **Thí sinh** — `http://<IP_LAN>/student/` (Chrome kiosk)
 4. **Sau thi** — backup, báo cáo trên CBT - Viewer
 
 Chi tiết: [`docs/RUNBOOK-NGAY-G.md`](docs/RUNBOOK-NGAY-G.md)
@@ -94,8 +101,9 @@ node scripts/edge-bootstrap.mjs
 
 | File | Nội dung |
 |------|----------|
+| [`docs/NATIVE-DEPLOY.md`](docs/NATIVE-DEPLOY.md) | Setup tự động, profile phần cứng |
 | [`docs/RUNBOOK-NGAY-G.md`](docs/RUNBOOK-NGAY-G.md) | Checklist 24h / 1h / trong giờ thi |
-| [`docs/OFFLINE-LAN.md`](docs/OFFLINE-LAN.md) | IP, Docker, font, backup |
+| [`docs/OFFLINE-LAN.md`](docs/OFFLINE-LAN.md) | IP, font, backup |
 | [`docs/SEB-setup.md`](docs/SEB-setup.md) | Cấu hình Safe Exam Browser |
 | [`docs/PRODUCTION-SECRETS.md`](docs/PRODUCTION-SECRETS.md) | Bảo mật production |
 

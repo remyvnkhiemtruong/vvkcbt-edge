@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Optional, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, Optional, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -6,17 +6,20 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { StudentSession } from '../../database/entities/student-session.entity';
 import { ExamSession } from '../../database/entities/exam-session.entity';
-import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsForExam, DEFAULT_SCHOOL_NAME } from '@vnu/shared-types';
+import { StudentSessionStatus, AuditEventType, aggregatePartScores, getDefaultStructure, enrichQuestionsWithPart, orderQuestionsForExam, DEFAULT_SCHOOL_NAME, getSubjectMeta } from '@vnu/shared-types';
 import { QuestionCluster } from '../../database/entities/question-cluster.entity';
+import { MediaAsset } from '../../database/entities/media-asset.entity';
 import { In } from 'typeorm';
 import { AuditService } from '../../shared/audit/audit.service';
 import { ExamRouterService } from '../routing/exam-router.service';
+import { SlotSchedulerService } from '../routing/slot-scheduler.service';
 import { ScoringService } from '../../shared/scoring/scoring.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ProctoringGateway } from '../proctoring/proctoring.gateway';
 import { SubjectRoomCompletionService } from '../proctoring/subject-room-completion.service';
 import { isIpBindingDisabled, normalizeClientIp } from '../../shared/utils/client-ip';
+import { resolveMediaInValue } from '../../shared/utils/resolve-media-paths';
 
 @Injectable()
 export class StudentAuthService {
@@ -29,9 +32,12 @@ export class StudentAuthService {
     private readonly examSessionRepo: Repository<ExamSession>,
     @InjectRepository(QuestionCluster)
     private readonly clusterRepo: Repository<QuestionCluster>,
+    @InjectRepository(MediaAsset)
+    private readonly mediaRepo: Repository<MediaAsset>,
     private readonly jwtService: JwtService,
     private readonly auditService: AuditService,
     private readonly examRouter: ExamRouterService,
+    private readonly slotScheduler: SlotSchedulerService,
     private readonly scoringService: ScoringService,
     @Optional() @InjectQueue('submit-retry') private readonly submitQueue: Queue | undefined,
     private readonly configService: ConfigService,
@@ -63,7 +69,7 @@ export class StudentAuthService {
       const tnSession = sessions.find((s) => s.rules?.exam_type === 'TN_THPT_2025');
       const active = tnSession ?? sessions[0];
       if (!active) {
-        const latest = await this.examSessionRepo.findOne({ order: { createdAt: 'DESC' } });
+        const [latest] = await this.examSessionRepo.find({ order: { createdAt: 'DESC' }, take: 1 });
         if (!latest) throw new NotFoundException('Chưa có ca thi khả dụng');
         examSessionId = latest.id;
         sessionName = latest.name;
@@ -74,6 +80,35 @@ export class StudentAuthService {
     }
 
     return { examSessionId, roomName, capacity, schoolName, sessionName };
+  }
+
+  async getProfile(session: StudentSession) {
+    const full = await this.sessionRepo.findOne({
+      where: { id: session.id },
+      relations: ['student', 'student.class', 'examSession'],
+    });
+    if (!full) throw new NotFoundException('Không tìm thấy phiên thi');
+
+    const roomCtx = await this.getRoomContext();
+    const subjectCode = full.subjectCode ?? '';
+    const subjectMeta = getSubjectMeta(subjectCode);
+
+    return {
+      fullName: full.student?.fullName?.trim() || '',
+      sbd: full.sbd,
+      examAccount: full.examAccount,
+      subjectCode,
+      subjectName: subjectMeta?.nameVi ?? subjectCode,
+      className: full.student?.class?.name ?? '',
+      comboCode: full.student?.comboCode ?? '',
+      subjectGroup: full.student?.subjectGroup ?? '',
+      labRoom: full.student?.labRoom?.trim() || roomCtx.roomName,
+      sessionName: full.examSession?.name ?? roomCtx.sessionName,
+      schoolName: roomCtx.schoolName,
+      roomName: roomCtx.roomName,
+      examStarted: !!full.examStartedAt,
+      submitted: !!full.submittedAt,
+    };
   }
 
   private async resolveExamSessionId(examSessionId?: string): Promise<string> {
@@ -209,6 +244,34 @@ export class StudentAuthService {
     }
   }
 
+  private isDevAutoOpenSlots(): boolean {
+    return (
+      process.env.NODE_ENV === 'development' &&
+      this.configService.get<string>('EDGE_DEV_AUTO_OPEN_SLOTS') === 'true'
+    );
+  }
+
+  private async maybeDevAutoOpenSlot(session: StudentSession) {
+    if (!this.isDevAutoOpenSlots() || !session.examSessionId || !session.subjectCode) return;
+    try {
+      await this.slotScheduler.openSubjectSlots(session.examSessionId, session.subjectCode);
+    } catch (err) {
+      this.logger.debug(
+        `dev auto-open skipped for ${session.subjectCode}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  private async safeGetExam(session: StudentSession) {
+    try {
+      return await this.getExam(session);
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      this.logger.error(`getExam failed for session ${session.id}`, err instanceof Error ? err.stack : err);
+      throw new InternalServerErrorException('Không tải được đề thi — liên hệ giám thị');
+    }
+  }
+
   private async assertCanStartExam(session: StudentSession) {
     if (!session.studentId || !session.subjectCode) {
       throw new BadRequestException('Chưa phân môn thi');
@@ -251,16 +314,18 @@ export class StudentAuthService {
     });
     if (!sessionFull?.examPaper) throw new BadRequestException('Chưa được phân đề thi');
     if (sessionFull.submittedAt) throw new BadRequestException('Đã nộp bài');
+
     if (sessionFull.examStartedAt) {
-      return this.getExam(sessionFull);
+      await this.ensureSubjectSlotStarted(sessionFull);
+      return this.safeGetExam(sessionFull);
     }
 
+    await this.maybeDevAutoOpenSlot(sessionFull);
     await this.assertCanStartExam(sessionFull);
+    await this.ensureSubjectSlotStarted(sessionFull);
 
     sessionFull.examStartedAt = new Date();
     await this.sessionRepo.save(sessionFull);
-
-    await this.ensureSubjectSlotStarted(sessionFull);
 
     await this.auditService.log({
       eventType: AuditEventType.EXAM_START,
@@ -270,7 +335,7 @@ export class StudentAuthService {
       payload: { sbd: sessionFull.sbd, subjectCode: sessionFull.subjectCode },
     });
 
-    return this.getExam(sessionFull);
+    return this.safeGetExam(sessionFull);
   }
 
   async getExam(session: StudentSession) {
@@ -345,6 +410,12 @@ export class StudentAuthService {
       return stripped;
     });
 
+    const mediaAssets = await this.mediaRepo.find();
+    const resolvedQuestions =
+      mediaAssets.length > 0
+        ? questions.map((q) => resolveMediaInValue(q, mediaAssets))
+        : questions;
+
     const now = new Date();
     const endsAt = this.computeExamEndsAt(sessionWithPaper, template, examSession);
 
@@ -354,7 +425,7 @@ export class StudentAuthService {
       title: paper.title,
       subject: paper.subject,
       sessionName: examSession.name,
-      questions,
+      questions: resolvedQuestions,
       serverNow: now.toISOString(),
       examStarted: !!sessionWithPaper.examStartedAt,
       examStartedAt: sessionWithPaper.examStartedAt?.toISOString(),

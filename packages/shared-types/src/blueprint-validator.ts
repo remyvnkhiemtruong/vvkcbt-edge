@@ -6,6 +6,7 @@ import type {
 } from './exam-package';
 import type { TnThptSubjectCode } from './tn-thpt-catalog';
 import { getDefaultStructure, getSubjectNameVi } from './tn-thpt-catalog';
+import { isValidShortAnswer } from './short-answer';
 
 export interface BlueprintValidationInput {
   subjectCode: string;
@@ -204,6 +205,14 @@ export function validateSubjectBlueprint(input: BlueprintValidationInput): Bluep
         }
         if (partCfg.type === 'true_false' && !isBooleanArray4(q.correctKey)) {
           errors.push(`${nameVi}: câu TF ${q.id ?? '?'} correctKey phải là boolean[4]`);
+        }
+        if (partCfg.type === 'short_answer') {
+          const key = String(q.correctKey ?? '').trim();
+          if (!isValidShortAnswer(key)) {
+            errors.push(
+              `${nameVi}: câu trả lời ngắn ${q.id ?? '?'} — đáp án phải tối đa 4 ký tự (số âm/dương, thập phân, dấu chấm hoặc phẩy)`,
+            );
+          }
         }
       }
       if (subjectCode === 'INFORMATICS' && partKey === 'part2_true_false') {

@@ -33,9 +33,20 @@ const exactPairs = [
   ['apps/web/shared/src/components/InformaticsCodeRenderer.tsx', 'packages/web-shared/src/components/InformaticsCodeRenderer.tsx'],
   ['apps/web/shared/src/components/DualCodeBlockView.tsx', 'packages/web-shared/src/components/DualCodeBlockView.tsx'],
   ['apps/web/shared/src/utils/rich-text-parser.ts', 'packages/web-shared/src/utils/rich-text-parser.ts'],
+  ['apps/web/shared/src/utils/media-url.ts', 'packages/web-shared/src/utils/media-url.ts'],
   ['packages/shared-types/src/question-content.ts', 'packages/shared-types/src/question-content.ts'],
   ['apps/web/shared/src/styles/exam-view.css', 'packages/web-shared/src/styles/exam-view.css'],
   ['apps/web/shared/src/theme/exam-theme.css', 'packages/web-shared/src/theme/exam-theme.css'],
+];
+
+/** Shared i18n — both repos must contain exam UI keys */
+const sharedMarkerChecks = [
+  {
+    edge: 'apps/web/shared/src/i18n/vi.ts',
+    composer: 'packages/web-shared/src/i18n/vi.ts',
+    markers: ['answeredCount', 'emptyQuestions', 'violationCount', 'passageRange', 'waitProctorOpen'],
+    label: 'vi.ts exam i18n keys',
+  },
 ];
 
 /** Composer-only files — required markers (column aliases, compose modes) */
@@ -119,6 +130,30 @@ for (const rel of [
   } else {
     console.log(`OK ${path.basename(rel)} branding markers`);
   }
+}
+
+for (const { edge, composer, markers, label } of sharedMarkerChecks) {
+  let labelOk = true;
+  for (const [root, rel] of [
+    [edgeRoot, edge],
+    [composerRoot, composer],
+  ]) {
+    const full = path.join(root, rel);
+    if (!existsSync(full)) {
+      console.error(`MISSING: ${rel}`);
+      failed = true;
+      labelOk = false;
+      continue;
+    }
+    const text = readFileSync(full, 'utf8');
+    const missing = markers.filter((m) => !text.includes(m));
+    if (missing.length) {
+      console.error(`DRIFT: ${label} in ${rel} — thiếu: ${missing.join(', ')}`);
+      failed = true;
+      labelOk = false;
+    }
+  }
+  if (labelOk) console.log(`OK ${label}`);
 }
 
 for (const { rel, markers, label } of composerMarkerChecks) {

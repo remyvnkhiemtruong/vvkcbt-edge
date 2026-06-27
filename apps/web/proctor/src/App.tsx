@@ -16,6 +16,7 @@ import { EndSubjectSessionPanel } from './post-exam/EndSubjectSessionPanel';
 import { ScoreboardOverlay, readAutoScoreboardEnabled, type SubjectRoomCompleteData } from './post-exam/ScoreboardOverlay';
 import { StudentDetailPanel, type GridItemExtended } from './post-exam/StudentDetailPanel';
 import { ProctorStudentTable } from './monitor/ProctorStudentTable';
+import { SubjectOpenBar } from './monitor/SubjectOpenBar';
 import { buildMonitorRows } from './monitor/proctor-monitor-utils';
 import { useProctorSocket } from './hooks/useProctorSocket';
 import { PreflightChecklist } from './prep/PreflightChecklist';
@@ -30,7 +31,7 @@ import {
   isProctorTokenUsable,
 } from './api';
 
-type ProctorMode = 'prep' | 'monitor' | 'report' | 'roomsheet' | 'endsession' | 'audit' | 'backup' | 'system';
+type ProctorMode = 'prep' | 'monitor' | 'schedule' | 'report' | 'roomsheet' | 'endsession' | 'audit' | 'backup' | 'system';
 
 const ProctorActionType = {
   LOCK_EXAM: 'lock_exam',
@@ -72,8 +73,8 @@ function uniqueLabRoomsFromGrid(grid: GridItem[]): string[] {
 const proctorBrandHeader = <CbtBrandLogo variant="header" size={40} />;
 
 function ProctorLogin({ onLogin }: { onLogin: () => void }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('proctor');
+  const [password, setPassword] = useState('proctor123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -102,7 +103,7 @@ function ProctorLogin({ onLogin }: { onLogin: () => void }) {
             size={72}
             showSchoolName
             layout="stack"
-            align="left"
+            align="center"
           />
         </div>
         <h2>Đăng nhập giám thị</h2>
@@ -118,18 +119,25 @@ function ProctorLogin({ onLogin }: { onLogin: () => void }) {
         <button type="submit" className="cbt-btn cbt-btn-primary" disabled={loading}>
           {loading ? 'Đang đăng nhập…' : 'Đăng nhập'}
         </button>
-        <p className="admin-hint" style={{ fontSize: '0.8rem', opacity: 0.85 }}>
-          Mặc định dev: proctor / proctor123
-        </p>
       </form>
       <style>{`
-        .proctor-login { max-width: 360px; margin: 2rem auto; display: flex; flex-direction: column; gap: 0.75rem; color: #fff; }
-        .proctor-login__brand { margin-bottom: 0.25rem; }
-        .proctor-login h2 { margin: 0 0 0.25rem; }
+        .proctor-login {
+          max-width: 360px;
+          margin: 2rem auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.75rem;
+          color: #fff;
+          text-align: center;
+        }
+        .proctor-login__brand { margin-bottom: 0.25rem; width: 100%; display: flex; justify-content: center; }
+        .proctor-login h2 { margin: 0 0 0.25rem; width: 100%; }
         .proctor-login .cbt-brand-logo__dept { color: #94a3b8; }
         .proctor-login .cbt-brand-logo__school { color: #f1f5f9; }
-        .proctor-login label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-        .proctor-login-error { background: #fef2f2; color: #b91c1c; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; }
+        .proctor-login label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; width: 100%; text-align: left; }
+        .proctor-login .cbt-btn { width: 100%; }
+        .proctor-login-error { background: #fef2f2; color: #b91c1c; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; width: 100%; text-align: left; }
       `}</style>
     </CbtPageShell>
   </>
@@ -161,10 +169,12 @@ interface ImportStatusRow {
 function ProctorPrep({
   token,
   onReady,
+  onCleared,
   onSessionExpired,
 }: {
   token: string;
   onReady: (examSessionId: string, subjectCodes?: string[]) => void;
+  onCleared?: () => void;
   onSessionExpired?: () => void;
 }) {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -175,10 +185,6 @@ function ProctorPrep({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
-  const [dryRunResult, setDryRunResult] = useState<{
-    passed: boolean;
-    checklist: Array<{ item: string; ok: boolean; detail?: string }>;
-  } | null>(null);
   const [packageStatus, setPackageStatus] = useState<{
     canImportNewPackage: boolean;
     needsImportConfirm: boolean;
@@ -225,23 +231,6 @@ function ProctorPrep({
     window.setTimeout(() => setToast(null), 6000);
   };
 
-  const downloadTemplate = async () => {
-    setBusy(true);
-    try {
-      const res = await proctorFetch('/proctor/packages/template', token);
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'exam-package-mau.zip';
-      a.click();
-      showToast('info', 'Đã tải ZIP mẫu');
-    } catch (err) {
-      prepError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -256,11 +245,34 @@ function ProctorPrep({
     }
     setBusy(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
+      const dryFd = new FormData();
+      dryFd.append('file', file);
+
+      const dryRes = await proctorFetch('/proctor/packages/dry-run', token, {
+        method: 'POST',
+        body: dryFd,
+      });
+      const dry = (await dryRes.json()) as {
+        passed?: boolean;
+        checklist?: Array<{ item: string; ok: boolean; detail?: string }>;
+      };
+      const zipCheck = dry.checklist?.find((c) => c.item === 'ZIP hợp lệ');
+      if (zipCheck && !zipCheck.ok) {
+        throw new Error(zipCheck.detail || 'ZIP không hợp lệ — kiểm tra gói từ Composer');
+      }
+      const credCheck = dry.checklist?.find((c) => c.item === 'SBD/PIN trong gói');
+      if (credCheck && !credCheck.ok) {
+        throw new Error(
+          credCheck.detail ||
+            'Thiếu SBD/PIN — mở Composer, tab SBD & in phiếu, xếp SBD/PIN rồi xuất ZIP lại',
+        );
+      }
+
+      const importFd = new FormData();
+      importFd.append('file', file);
       const res = await proctorFetch('/proctor/packages/import', token, {
         method: 'POST',
-        body: fd,
+        body: importFd,
       });
       const result = (await res.json()) as ImportResult;
       setImportResult(result);
@@ -270,10 +282,36 @@ function ProctorPrep({
       const statusRes = await proctorFetch('/proctor/packages/status', token);
       setPackageStatus(await statusRes.json());
     } catch (err) {
+      console.error('Import ZIP failed:', err);
       prepError(err);
     } finally {
       setBusy(false);
       e.target.value = '';
+    }
+  };
+
+  const clearAllData = async () => {
+    if (
+      !window.confirm(
+        'Xóa toàn bộ dữ liệu ca thi trên máy?\n\n(đề thi, điểm, nhật ký, bài làm, media…)\n\nHành động không thể hoàn tác. Tiếp tục?',
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await proctorFetch('/proctor/packages/clear', token, { method: 'POST' });
+      localStorage.removeItem(SESSION_KEY);
+      setImportResult(null);
+      setImportStatus(null);
+      const statusRes = await proctorFetch('/proctor/packages/status', token);
+      setPackageStatus(await statusRes.json());
+      showToast('info', 'Đã xóa toàn bộ dữ liệu — có thể import gói mới.');
+      onCleared?.();
+    } catch (err) {
+      prepError(err);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -317,14 +355,7 @@ function ProctorPrep({
         </div>
       )}
       <h2>Chuẩn bị kỳ thi</h2>
-      <p className="admin-hint">
-        Mỗi thí sinh chỉ thi <strong>một môn</strong>. Các môn <strong>cùng khung giờ</strong> có thể import nhiều USB
-        (mỗi USB một môn) — hệ thống tự gộp vào một ca. Import khung giờ khác sẽ thay ca hiện tại (nên xuất gói phòng thi trước).
-      </p>
       <div className="proctor-prep-actions">
-        <button type="button" className="cbt-btn cbt-btn-outline" onClick={downloadTemplate} disabled={busy}>
-          Tải ZIP mẫu
-        </button>
         <label className="cbt-btn cbt-btn-primary" style={{ cursor: 'pointer' }}>
           Import gói kỳ thi
           <input
@@ -335,52 +366,19 @@ function ProctorPrep({
             disabled={busy}
           />
         </label>
-        <label className="cbt-btn cbt-btn-outline" style={{ cursor: 'pointer' }}>
-          {vi.proctor.dryRun}
-          <input
-            type="file"
-            accept=".zip"
-            hidden
-            disabled={busy}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setBusy(true);
-              try {
-                const fd = new FormData();
-                fd.append('file', file);
-                const res = await proctorFetch('/proctor/packages/dry-run', token, {
-                  method: 'POST',
-                  body: fd,
-                });
-                setDryRunResult(await res.json());
-              } catch (err) {
-                prepError(err);
-              } finally {
-                setBusy(false);
-                e.target.value = '';
-              }
-            }}
-          />
-        </label>
+        <button
+          type="button"
+          className="cbt-btn cbt-btn-outline"
+          style={{ borderColor: '#f87171', color: '#fca5a5' }}
+          onClick={clearAllData}
+          disabled={busy}
+        >
+          Xóa toàn bộ dữ liệu
+        </button>
         <button type="button" className="cbt-btn cbt-btn-outline" onClick={useExisting} disabled={busy}>
           Dùng ca đã import
         </button>
       </div>
-      {dryRunResult && (
-        <div style={{ marginTop: '1rem' }}>
-          <h3 style={{ color: dryRunResult.passed ? '#86efac' : '#fca5a5' }}>
-            {vi.proctor.dryRunResult(dryRunResult.passed)}
-          </h3>
-          <ul style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>
-            {dryRunResult.checklist.map((c) => (
-              <li key={c.item} style={{ color: c.ok ? '#86efac' : '#fca5a5' }}>
-                {c.ok ? '✓' : '✗'} {c.item}{c.detail ? ` — ${c.detail}` : ''}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       {importStatus && importStatus.subjects.length > 0 && (
         <div className="proctor-import-checklist" style={{ marginTop: '1rem' }}>
           <h3>Ca thi hiện tại</h3>
@@ -481,6 +479,7 @@ export default function App() {
   const [selected, setSelected] = useState<GridItem | null>(null);
   const [scoreboardData, setScoreboardData] = useState<SubjectRoomCompleteData | null>(null);
   const [scoreboardToast, setScoreboardToast] = useState<string | null>(null);
+  const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const production = isProductionUi();
 
   const handleSessionExpired = () => {
@@ -488,6 +487,38 @@ export default function App() {
     setToken('');
     setAuthed(false);
     setSessionToast(SESSION_EXPIRED_MSG);
+  };
+
+  const resetExamSessionState = () => {
+    localStorage.removeItem(SESSION_KEY);
+    setExamSessionId('');
+    setGrid([]);
+    setSessionSubjectCodes([]);
+    setSelectedSubjectCode('');
+    setMonitorSubjectFilter('');
+    setSelected(null);
+    setScoreboardData(null);
+    setAlerts([]);
+    setMode('prep');
+  };
+
+  const handleClearAllData = async () => {
+    if (
+      !window.confirm(
+        'Xóa toàn bộ dữ liệu ca thi trên máy?\n\n(đề thi, điểm, nhật ký, bài làm, media…)\n\nHành động không thể hoàn tác. Tiếp tục?',
+      )
+    ) {
+      return;
+    }
+    try {
+      await proctorFetch('/proctor/packages/clear', token, { method: 'POST' });
+      resetExamSessionState();
+      setScoreboardToast('Đã xóa toàn bộ dữ liệu — có thể import gói mới.');
+      window.setTimeout(() => setScoreboardToast(null), 6000);
+    } catch (err) {
+      if (err instanceof Error && err.message === SESSION_EXPIRED_MSG) handleSessionExpired();
+      else window.alert(err instanceof Error ? err.message : 'Xóa dữ liệu thất bại');
+    }
   };
 
   useEffect(() => {
@@ -626,6 +657,7 @@ export default function App() {
         [`HỖ TRỢ: SBD ${data.sbd} — ${data.reason ?? 'Yêu cầu giám thị'}`, ...a].slice(0, 20),
       );
     },
+    onScheduleUpdate: () => setScheduleRefreshKey((k) => k + 1),
   });
 
   const handleLogout = () => {
@@ -714,6 +746,7 @@ export default function App() {
             }
             setMode('monitor');
           }}
+          onCleared={resetExamSessionState}
           onSessionExpired={handleSessionExpired}
         />
       </CbtPageShell>
@@ -735,19 +768,36 @@ export default function App() {
     return (
       <CbtPageShell headerTitle={vi.proctor.title} headerLeft={proctorBrandHeader} darkBody wide>
         <div className="proctor-toolbar proctor-mode-nav">
-          {modeNav('monitor', 'Giám sát')}
-          {modeNav('report', 'Báo cáo')}
-          {modeNav('roomsheet', 'Biên bản phòng')}
+          {modeNav('monitor', vi.proctor.tabs.monitor)}
+          {modeNav('schedule', vi.proctor.tabs.schedule)}
+          {modeNav('report', vi.proctor.tabs.report)}
+          {modeNav('roomsheet', 'Danh sách điểm')}
           {modeNav('endsession', 'Kết thúc ca thi')}
-          {modeNav('audit', 'Nhật ký')}
-          {modeNav('backup', 'Sao lưu')}
-          {modeNav('system', 'Hệ thống')}
+          {modeNav('audit', vi.proctor.tabs.audit)}
+          {modeNav('backup', vi.proctor.tabs.backup)}
+          {modeNav('system', vi.proctor.tabs.system)}
           {modeNav('prep', 'Import gói')}
+          <button
+            type="button"
+            className="cbt-btn cbt-btn-outline"
+            style={{ borderColor: '#f87171', color: '#fca5a5' }}
+            onClick={handleClearAllData}
+          >
+            Xóa dữ liệu
+          </button>
           <button type="button" className="cbt-btn cbt-btn-outline" style={{ marginLeft: 'auto' }} onClick={handleLogout}>
             Đăng xuất
           </button>
         </div>
         {mode === 'report' && <ReportTab token={token} examSessionId={examSessionId} />}
+        {mode === 'schedule' && (
+          <SubjectOpenBar
+            token={token}
+            examSessionId={examSessionId}
+            refreshKey={scheduleRefreshKey}
+            onSessionExpired={handleSessionExpired}
+          />
+        )}
         {mode === 'roomsheet' && (
           <RoomScoreSheetTab
             token={token}
@@ -813,15 +863,24 @@ export default function App() {
         <span className={`proctor-ws ${connected ? 'on' : 'off'}`}>
           {connected ? '● Kết nối realtime' : '○ Mất kết nối WS'}
         </span>
-        {modeNav('monitor', 'Giám sát')}
-        {modeNav('report', 'Báo cáo')}
-        {modeNav('roomsheet', 'Biên bản phòng')}
+        {modeNav('monitor', vi.proctor.tabs.monitor)}
+        {modeNav('schedule', vi.proctor.tabs.schedule)}
+        {modeNav('report', vi.proctor.tabs.report)}
+        {modeNav('roomsheet', 'Danh sách điểm')}
         {modeNav('endsession', 'Kết thúc ca thi')}
         {modeNav('audit', 'Nhật ký')}
         {modeNav('backup', 'Sao lưu')}
         {modeNav('system', 'Hệ thống')}
         <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => setMode('prep')}>
           Import gói
+        </button>
+        <button
+          type="button"
+          className="cbt-btn cbt-btn-outline"
+          style={{ borderColor: '#f87171', color: '#fca5a5' }}
+          onClick={handleClearAllData}
+        >
+          Xóa dữ liệu
         </button>
         {scoreboardData && (
           <button type="button" className="cbt-btn cbt-btn-outline" onClick={() => setScoreboardData(scoreboardData)}>
@@ -838,6 +897,14 @@ export default function App() {
           {scoreboardToast}
         </div>
       )}
+
+      <SubjectOpenBar
+        token={token}
+        examSessionId={examSessionId}
+        refreshKey={scheduleRefreshKey}
+        onSessionExpired={handleSessionExpired}
+        compact
+      />
 
       {alerts.length > 0 && (
         <div className="proctor-alerts">

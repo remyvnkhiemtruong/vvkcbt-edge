@@ -55,7 +55,7 @@ const REQUIRED_FILES = ['manifest.json', 'session.json', 'subjects.json'];
 
 @Injectable()
 export class ExamPackageService {
-  private uploadDir = process.env.UPLOAD_DIR || './uploads';
+  private uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
 
   constructor(
     @InjectRepository(ExamSession)
@@ -424,11 +424,16 @@ export class ExamPackageService {
     canImportNewPackage: boolean;
     needsImportConfirm: boolean;
   }> {
-    const active = await this.sessionRepo.findOne({
+    const [active] = await this.sessionRepo.find({
       where: { status: 'active' },
       order: { updatedAt: 'DESC' },
+      take: 1,
     });
-    const latest = active ?? (await this.sessionRepo.findOne({ order: { updatedAt: 'DESC' } }));
+    let latest = active;
+    if (!latest) {
+      const [row] = await this.sessionRepo.find({ order: { updatedAt: 'DESC' }, take: 1 });
+      latest = row;
+    }
     if (!latest) {
       return {
         examSessionId: null,
@@ -445,7 +450,12 @@ export class ExamPackageService {
       examSessionId: latest.id,
       sessionName: latest.name,
       packageId: latest.packageId,
-      roomExportedAt: latest.roomExportedAt?.toISOString() ?? null,
+      roomExportedAt: (() => {
+        const raw = latest.roomExportedAt;
+        if (!raw) return null;
+        const d = raw instanceof Date ? raw : new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d.toISOString();
+      })(),
       status: latest.status,
       canImportNewPackage: true,
       needsImportConfirm: true,
@@ -465,6 +475,24 @@ export class ExamPackageService {
     await manager.getRepository(ExamSession).createQueryBuilder().delete().execute();
     await manager.getRepository(QuestionBank).createQueryBuilder().delete().execute();
     await manager.getRepository(QuestionCluster).createQueryBuilder().delete().execute();
+    await manager.getRepository(MediaAsset).createQueryBuilder().delete().execute();
+  }
+
+  private clearUploadDir(): void {
+    if (!fs.existsSync(this.uploadDir)) return;
+    for (const entry of fs.readdirSync(this.uploadDir)) {
+      if (entry === '.gitkeep') continue;
+      fs.rmSync(path.join(this.uploadDir, entry), { force: true, recursive: true });
+    }
+  }
+
+  /** Xóa toàn bộ dữ liệu ca thi trên Edge (giữ danh mục trường/lớp/học sinh nếu có). */
+  async clearAllExamData(): Promise<{ cleared: true }> {
+    await this.dataSource.transaction(async (manager) => {
+      await this.purgeAllEdgeExamData(manager);
+    });
+    this.clearUploadDir();
+    return { cleared: true };
   }
 
   private async importMediaFromDir(
@@ -489,7 +517,11 @@ export class ExamPackageService {
           fs.writeFileSync(dest, buf);
           const storedPath = `/uploads/${filename}`;
           pathMap.set(rel, storedPath);
-          pathMap.set(`media/${path.relative(mediaRoot, full).replace(/\\/g, '/')}`, storedPath);
+          const mediaRel = `media/${path.relative(mediaRoot, full).replace(/\\/g, '/')}`;
+          pathMap.set(mediaRel, storedPath);
+          const base = path.basename(full);
+          pathMap.set(base, storedPath);
+          pathMap.set(`media/${base}`, storedPath);
           await mediaRepo.save(
             mediaRepo.create({
               filename,
@@ -513,6 +545,7 @@ export class ExamPackageService {
     pathMap.forEach((newPath, oldPath) => {
       out = out.split(oldPath).join(newPath);
       out = out.split(`[Ảnh: ${oldPath}]`).join(`[Ảnh: ${newPath}]`);
+      out = out.split(`[Audio: ${oldPath}]`).join(`[Audio: ${newPath}]`);
     });
     return JSON.parse(out) as T;
   }

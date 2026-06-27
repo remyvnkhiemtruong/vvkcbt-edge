@@ -15,6 +15,7 @@ import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as fs from 'fs';
+import * as path from 'path';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { MediaAsset } from '../database/entities/media-asset.entity';
 import { StudentSession } from '../database/entities/student-session.entity';
@@ -66,7 +67,7 @@ export class InfraController {
       checks.redis = isEdgeLightweight() ? 'skipped (lightweight)' : 'error';
     }
 
-    const uploadDir = process.env.UPLOAD_DIR || './uploads';
+    const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
     try {
       if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
       fs.accessSync(uploadDir, fs.constants.W_OK);
@@ -164,7 +165,9 @@ export class InfraController {
       await this.sessionRepo.save(session);
     }
 
-    let data: Buffer = fs.readFileSync(asset.path);
+    const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
+    const filePath = path.join(uploadDir, asset.filename);
+    let data: Buffer = fs.readFileSync(filePath);
     if (asset.encrypted) {
       data = Buffer.from(this.decrypt(data));
     }

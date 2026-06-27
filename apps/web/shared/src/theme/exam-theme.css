@@ -134,6 +134,7 @@
 /* ── Top bar ── */
 .exam-topbar {
   position: relative;
+  z-index: 5;
   flex-shrink: 0;
   display: grid;
   grid-template-columns: 1fr auto 1fr;

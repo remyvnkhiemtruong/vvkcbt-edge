@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { StaffRole } from '../guards/staff-auth.guard';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { StaffUserService } from './staff-user.service';
+import { DEFAULT_PROCTOR_PASSWORD, DEFAULT_PROCTOR_USERNAME } from './staff-defaults';
 
 @Injectable()
 export class StaffAuthService {
@@ -27,11 +28,22 @@ export class StaffAuthService {
   }
 
   async loginProctor(username: string, password: string) {
+    try {
+      await this.rateLimit.check(`staff:${username}`, 10, 60);
+    } catch {
+      throw new HttpException('Quá nhiều lần đăng nhập', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    if (username === DEFAULT_PROCTOR_USERNAME && password === DEFAULT_PROCTOR_PASSWORD) {
+      const token = this.jwtService.sign({ sub: DEFAULT_PROCTOR_USERNAME, role: 'proctor' });
+      return { token, role: 'proctor' as const };
+    }
+
     return this.login(
       username,
       password,
-      this.configService.get<string>('PROCTOR_USER') || 'proctor',
-      this.configService.get<string>('PROCTOR_PASSWORD') || 'proctor123',
+      this.configService.get<string>('PROCTOR_USER') || DEFAULT_PROCTOR_USERNAME,
+      this.configService.get<string>('PROCTOR_PASSWORD') || DEFAULT_PROCTOR_PASSWORD,
       this.configService.get<string>('PROCTOR_PASSWORD_HASH'),
       'proctor',
     );

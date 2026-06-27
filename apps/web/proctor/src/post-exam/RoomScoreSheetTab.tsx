@@ -1,18 +1,6 @@
 import { useEffect, useState } from 'react';
+import { proctorFetch } from '../api';
 import { SubjectCodeSelect } from './SubjectCodeSelect';
-
-const API = import.meta.env.VITE_API_URL || '';
-const NAMES_KEY = 'vnu_proctor_roomsheet_names';
-
-function loadNames(): { proctor1Name: string; proctor2Name: string } {
-  try {
-    const raw = localStorage.getItem(NAMES_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    /* ignore */
-  }
-  return { proctor1Name: '', proctor2Name: '' };
-}
 
 export function RoomScoreSheetTab({
   token,
@@ -32,23 +20,11 @@ export function RoomScoreSheetTab({
   labRooms?: string[];
 }) {
   const [room, setRoom] = useState(defaultRoom);
-  const [proctor1Name, setProctor1Name] = useState('');
-  const [proctor2Name, setProctor2Name] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
   const hasSubject = subjectCode.trim().length > 0;
   const roomOptions = labRooms.length > 0 ? labRooms : defaultRoom ? [defaultRoom] : [];
-
-  useEffect(() => {
-    const s = loadNames();
-    setProctor1Name(s.proctor1Name);
-    setProctor2Name(s.proctor2Name);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(NAMES_KEY, JSON.stringify({ proctor1Name, proctor2Name }));
-  }, [proctor1Name, proctor2Name]);
 
   useEffect(() => {
     if (roomOptions.length === 1 && roomOptions[0] && room !== roomOptions[0]) {
@@ -58,11 +34,11 @@ export function RoomScoreSheetTab({
 
   const download = async (format: 'pdf' | 'xlsx') => {
     if (!hasSubject) {
-      setMsg('Chọn môn thi trước khi tải biên bản.');
+      setMsg('Chọn môn thi trước khi tải danh sách.');
       return;
     }
     if (!room.trim()) {
-      setMsg('Nhập phòng thi trước khi tải biên bản.');
+      setMsg('Nhập phòng thi trước khi tải danh sách.');
       return;
     }
     setBusy(true);
@@ -72,22 +48,29 @@ export function RoomScoreSheetTab({
         subjectCode: subjectCode.trim(),
         room: room.trim(),
         format,
-        proctor1Name,
-        proctor2Name,
       });
-      const res = await fetch(
-        `${API}/api/proctor/sessions/${examSessionId}/room-score-sheet?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+      const res = await proctorFetch(
+        `/proctor/sessions/${examSessionId}/room-score-sheet?${params}`,
+        token,
       );
-      if (!res.ok) throw new Error(await res.text());
+      const pdfFallback = res.headers.get('X-Pdf-Fallback') === 'excel';
+      const actualFormat = pdfFallback ? 'xlsx' : format;
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `bien-ban-${subjectCode.trim()}.${format === 'xlsx' ? 'xlsx' : 'pdf'}`;
+      const date = new Date();
+      const ymd = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+      a.download = `DanhSachDiem_${subjectCode.trim()}_${room.trim().replace(/\s+/g, '_')}_${ymd}.${actualFormat === 'xlsx' ? 'xlsx' : 'pdf'}`;
       a.click();
-      setMsg(format === 'pdf' ? 'Đã tải PDF biên bản phòng thi.' : 'Đã tải Excel biên bản phòng thi.');
+      setMsg(
+        pdfFallback
+          ? 'PDF không khả dụng — đã tải Excel thay thế.'
+          : format === 'pdf'
+            ? 'Đã tải PDF danh sách điểm.'
+            : 'Đã tải Excel danh sách điểm.',
+      );
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Xuất biên bản thất bại');
+      setMsg(e instanceof Error ? e.message : 'Xuất danh sách thất bại');
     } finally {
       setBusy(false);
     }
@@ -95,7 +78,7 @@ export function RoomScoreSheetTab({
 
   return (
     <div className="proctor-tab-panel">
-      <h3>Biên bản điểm phòng thi</h3>
+      <h3>Danh sách điểm phòng thi</h3>
       <SubjectCodeSelect
         subjectCodes={subjectCodes}
         value={subjectCode}
@@ -103,12 +86,9 @@ export function RoomScoreSheetTab({
       />
       {!hasSubject && (
         <p className="cbt-error-text" style={{ fontSize: '0.85rem' }}>
-          Chọn môn thi để tải biên bản.
+          Chọn môn thi để tải danh sách điểm.
         </p>
       )}
-      <p className="admin-hint">
-        In 2 bản, thí sinh ký xác nhận điểm; giám thị ký tay trên bản in.
-      </p>
       <div className="proctor-form-row">
         <label>
           Phòng
@@ -124,14 +104,6 @@ export function RoomScoreSheetTab({
             <input className="cbt-input" value={room} onChange={(e) => setRoom(e.target.value)} />
           )}
         </label>
-        <label>
-          Giám thị 1
-          <input className="cbt-input" value={proctor1Name} onChange={(e) => setProctor1Name(e.target.value)} />
-        </label>
-        <label>
-          Giám thị 2
-          <input className="cbt-input" value={proctor2Name} onChange={(e) => setProctor2Name(e.target.value)} />
-        </label>
       </div>
       <div className="proctor-form-actions">
         <button
@@ -140,7 +112,7 @@ export function RoomScoreSheetTab({
           disabled={busy || !hasSubject}
           onClick={() => download('pdf')}
         >
-          {busy ? 'Đang xuất…' : 'Tải PDF biên bản'}
+          {busy ? 'Đang xuất…' : 'Tải PDF'}
         </button>
         <button
           type="button"

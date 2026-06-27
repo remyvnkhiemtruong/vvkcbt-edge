@@ -77,7 +77,7 @@ export function ReportTab({ token, examSessionId }: { token: string; examSession
       )}
       <h3>Báo cáo & điểm</h3>
       <p className="admin-hint">
-        Xuất gói phòng thi (ZIP) khi cần lưu kết quả ca (Excel, nhật ký, biên bản, bài làm PDF).
+        Xuất gói phòng thi (ZIP) khi cần lưu kết quả ca (Excel, danh sách điểm, nhật ký, bài làm PDF).
       </p>
 
       {preview && (

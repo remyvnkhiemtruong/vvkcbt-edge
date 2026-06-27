@@ -31,10 +31,10 @@ function loadEnv() {
 
 loadEnv();
 
-const username = process.argv[2]?.trim();
-const password = process.argv[3];
+const username = process.argv[2]?.trim() || 'proctor';
+const password = process.argv[3] ?? 'proctor123';
 if (!username || !password) {
-  console.error('Usage: node scripts/seed-proctor-user.mjs <username> <password>');
+  console.error('Usage: node scripts/seed-proctor-user.mjs [username] [password]');
   process.exit(1);
 }
 

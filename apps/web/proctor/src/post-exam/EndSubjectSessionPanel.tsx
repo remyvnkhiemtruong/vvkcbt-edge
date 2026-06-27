@@ -112,9 +112,6 @@ export function EndSubjectSessionPanel({
           Chọn môn thi để kết thúc ca.
         </p>
       )}
-      <p className="admin-hint">
-        Xem tiến độ nộp bài và kết thúc ca theo từng môn (các môn cùng khung giờ trong một ca).
-      </p>
       <div className="proctor-form-row">
         <label>
           Phòng

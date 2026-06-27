@@ -4,6 +4,7 @@ import type { ExamQuestion } from './ExamViewShell';
 interface ExamQuestionPaletteProps {
   questions: ExamQuestion[];
   answers: Record<string, unknown>;
+  markedQuestionIds?: Record<string, boolean>;
   currentIdx: number;
   onSelect: (idx: number) => void;
   partOrder?: string[];
@@ -12,6 +13,7 @@ interface ExamQuestionPaletteProps {
 export function ExamQuestionPalette({
   questions,
   answers,
+  markedQuestionIds,
   currentIdx,
   onSelect,
   partOrder,
@@ -32,6 +34,7 @@ export function ExamQuestionPalette({
               const inPart = activePartIdx === pi;
               const inViewGroup = activeGroup && i >= activeGroup.start && i <= activeGroup.end;
               const answered = isQuestionAnswered(answers[q.id]);
+              const isMarked = !!markedQuestionIds?.[q.id];
               const isCurrent = i === currentIdx;
               return (
                 <button
@@ -43,6 +46,7 @@ export function ExamQuestionPalette({
                     inViewGroup ? 'in-cluster' : '',
                     isCurrent ? 'is-current' : '',
                     answered ? 'is-answered' : '',
+                    isMarked ? 'is-marked' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}

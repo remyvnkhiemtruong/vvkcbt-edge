@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, BadRequestException, StreamableFile, Res, Req } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { multerMemoryZip, readUploadedFileBuffer } from '../../shared/utils/multer-memory';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StudentSession } from '../../database/entities/student-session.entity';
@@ -78,8 +79,6 @@ export class ProctorController {
     @Query('subjectCode') subjectCode?: string,
     @Query('room') room?: string,
     @Query('format') format?: 'pdf' | 'xlsx',
-    @Query('proctor1Name') proctor1Name?: string,
-    @Query('proctor2Name') proctor2Name?: string,
   ) {
     if (!subjectCode?.trim()) throw new BadRequestException('Thiếu subjectCode');
     const roomName = room?.trim() || process.env.EDGE_ROOM_NAME || 'Phòng máy số 1';
@@ -88,8 +87,6 @@ export class ProctorController {
       subjectCode: subjectCode.trim(),
       room: roomName,
       format: fmt,
-      proctor1Name,
-      proctor2Name,
     });
     if (result.pdfFallback) {
       res.setHeader('X-Pdf-Fallback', 'excel');
@@ -164,10 +161,9 @@ export class ProctorController {
   }
 
   @Post('packages/import')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerMemoryZip))
   async importPackage(@UploadedFile() file: Express.Multer.File) {
-    if (!file?.buffer) throw new BadRequestException('Thiếu file ZIP');
-    const result = await this.packageService.importZip(file.buffer);
+    const result = await this.packageService.importZip(readUploadedFileBuffer(file));
     this.gateway.broadcastForceLogout('exam_imported');
     if (result.examSessionId) {
       this.gateway.broadcastScheduleUpdate(result.examSessionId, { reason: 'slots_batch' });
@@ -175,11 +171,17 @@ export class ProctorController {
     return result;
   }
 
+  @Post('packages/clear')
+  async clearExamData() {
+    const result = await this.packageService.clearAllExamData();
+    this.gateway.broadcastForceLogout('exam_cleared');
+    return result;
+  }
+
   @Post('packages/dry-run')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerMemoryZip))
   async dryRunPackage(@UploadedFile() file: Express.Multer.File) {
-    if (!file?.buffer) throw new BadRequestException('Thiếu file ZIP');
-    return this.packageService.dryRun(file.buffer);
+    return this.packageService.dryRun(readUploadedFileBuffer(file));
   }
 
   @Get('packages/template')
@@ -227,15 +229,11 @@ export class ProctorController {
     @Param('examSessionId') examSessionId: string,
     @Res() res: Response,
     @Query('room') room?: string,
-    @Query('proctor1Name') proctor1Name?: string,
-    @Query('proctor2Name') proctor2Name?: string,
   ) {
     const slots = await this.slotRepo.find({ where: { examSessionId }, take: 1 });
     const subjectCode = slots[0]?.subjectCode;
     const zip = await this.roomArchiveService.exportRoomArchive(examSessionId, {
       room,
-      proctor1Name,
-      proctor2Name,
     });
     const filename = this.roomArchiveService.exportFilename(examSessionId, subjectCode);
     res.setHeader('Content-Type', 'application/zip');
@@ -255,6 +253,19 @@ export class ProctorController {
       auditCsv: csv,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  @Get('sessions/:examSessionId/subject-schedule')
+  subjectSchedule(@Param('examSessionId') examSessionId: string) {
+    return this.slotScheduler.getSubjectSchedule(examSessionId);
+  }
+
+  @Post('sessions/:examSessionId/subjects/:subjectCode/open')
+  openSubject(
+    @Param('examSessionId') examSessionId: string,
+    @Param('subjectCode') subjectCode: string,
+  ) {
+    return this.slotScheduler.openSubjectSlots(examSessionId, subjectCode);
   }
 
   @Post('slots/:slotId/open-early')

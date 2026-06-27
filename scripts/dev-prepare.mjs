@@ -116,39 +116,39 @@ try {
 // 2. Free API port before dev servers start
 freePort(3000);
 
-// 3. Docker infra (Postgres + Redis)
-console.log('Starting PostgreSQL + Redis...');
-const dockerOk = tryRun('docker compose -f docker/docker-compose.yml up -d postgres redis');
-if (!dockerOk) {
-  console.warn('Could not start Docker services.');
-}
+// 3. Native infra (Postgres + Redis)
+console.log('Checking PostgreSQL + Redis...');
 
+const lightweight = (process.env.EDGE_LIGHTWEIGHT || envVars.EDGE_LIGHTWEIGHT) === 'true';
 const pgUp = await isPortOpen('127.0.0.1', 5432);
 const redisUp = await isPortOpen('127.0.0.1', 6379);
 
-if (!pgUp || !redisUp) {
+if (!pgUp || (!redisUp && !lightweight)) {
+  const isWin = process.platform === 'win32';
   console.error('\n========================================');
   console.error('  Postgres (5432) hoặc Redis (6379) chưa chạy');
   console.error('========================================');
   console.error(`  PostgreSQL: ${pgUp ? 'OK' : 'CHƯA MỞ'}`);
-  console.error(`  Redis:      ${redisUp ? 'OK' : 'CHƯA MỞ'}`);
+  console.error(`  Redis:      ${redisUp ? 'OK' : lightweight ? 'BỎ QUA (EDGE_LIGHTWEIGHT=true)' : 'CHƯA MỞ'}`);
   console.error('');
-  console.error('  Cách 1 — Docker Desktop (khuyên dùng dev):');
-  console.error('    1. Mở Docker Desktop, đợi trạng thái Running');
-  console.error('    2. Chạy lại: npm run dev');
+  if (isWin) {
+    console.error('  Chạy setup tự động: scripts\\setup-windows.bat');
+    console.error('  Hoặc: scripts\\setup-windows.bat --dev');
+  } else {
+    console.error('  Chạy setup tự động: bash scripts/setup-linux.sh');
+    console.error('  Hoặc: bash scripts/setup-linux.sh --dev');
+  }
   console.error('');
-  console.error('  Cách 2 — Chỉ khởi động DB (Docker đã cài):');
-  console.error('    docker compose -f docker/docker-compose.yml up -d postgres redis');
-  console.error('');
-  console.error('  Cách 3 — Native (không Docker): cài Postgres 16 + Redis,');
-  console.error('    tạo DB vnu_exam user vnu/vnu_secret, rồi npm run dev');
+  console.error('  Không có Redis: đặt EDGE_LIGHTWEIGHT=true trong .env');
+  console.error('  Chi tiết: docs/NATIVE-DEPLOY.md');
   console.error('========================================\n');
   process.exit(1);
 }
 
-// 3b. Wait for ports (healthy after docker start)
-console.log('Waiting for database and Redis...');
-const ready = await waitForPorts([5432, 6379], 120000);
+// 3b. Wait for ports
+console.log('Waiting for database' + (lightweight ? '' : ' and Redis') + '...');
+const portsToWait = lightweight ? [5432] : [5432, 6379];
+const ready = await waitForPorts(portsToWait, 120000);
 if (!ready) {
   console.error('ERROR: Postgres/Redis không phản hồi sau 120s.');
   process.exit(1);

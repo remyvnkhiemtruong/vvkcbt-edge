@@ -20,14 +20,23 @@ if errorlevel 1 (
 )
 
 if not exist "%ROOT%\.env" (
-  echo Chay setup lan dau...
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\setup-native.ps1"
+  echo Chua co .env — chay setup lan dau:
+  echo   scripts\setup-windows.bat
+  echo.
+  set /p RUN_SETUP="Chay setup-windows.bat ngay? [Y/N]: "
+  if /i "!RUN_SETUP!"=="Y" (
+    call "%ROOT%\scripts\setup-windows.bat"
+    if errorlevel 1 exit /b 1
+  ) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\setup-native.ps1"
+  )
 )
-
-set /p PROCTOR_USER="Ten dang nhap giam thi: "
-if "!PROCTOR_USER!"=="" exit /b 1
-set /p PROCTOR_PASS="Mat khau giam thi: "
-if "!PROCTOR_PASS!"=="" exit /b 1
+set PROCTOR_USER=proctor
+set PROCTOR_PASS=proctor123
+set /p PROCTOR_USER="Ten dang nhap giam thi [proctor]: "
+if "!PROCTOR_USER!"=="" set PROCTOR_USER=proctor
+set /p PROCTOR_PASS="Mat khau giam thi [proctor123]: "
+if "!PROCTOR_PASS!"=="" set PROCTOR_PASS=proctor123
 
 echo [1/5] Kiem tra Postgres + Redis...
 call npx wait-on tcp:5432 -t 30000

@@ -100,7 +100,6 @@ export function BackupTab({ token }: { token: string }) {
   return (
     <div className="proctor-tab-panel">
       <h3>Sao lưu &amp; phục hồi</h3>
-      <p className="admin-hint">Chỉ thực hiện trên máy Edge LAN tin cậy. Xuất file ra USB trước khi phục hồi.</p>
 
       <div className="proctor-backup-actions">
         <button type="button" className="cbt-btn cbt-btn-primary" disabled={busy} onClick={doBackup}>

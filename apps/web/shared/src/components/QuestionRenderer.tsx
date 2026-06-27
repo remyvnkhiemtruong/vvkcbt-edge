@@ -34,6 +34,8 @@ interface Props {
   onClick?: () => void;
   hideClusterPassage?: boolean;
   hideStem?: boolean;
+  hideStemAfter?: boolean;
+  hideCode?: boolean;
   readOnly?: boolean;
 }
 
@@ -49,6 +51,8 @@ export function QuestionRenderer({
   onClick,
   hideClusterPassage = false,
   hideStem = false,
+  hideStemAfter = false,
+  hideCode = false,
   readOnly = false,
 }: Props) {
   const { content, type } = question;
@@ -61,6 +65,8 @@ export function QuestionRenderer({
   const codeDisplay = content.codeDisplay;
   const hasCode = !!codeBlocks?.length;
   const showStemBlock = type !== 'cluster_mcq' && !hideStem;
+  const showCode = hasCode && !hideCode;
+  const showStemAfter = showStemBlock && content.stemAfter && !hideStemAfter;
 
   return (
     <div className="question" onClick={onClick}>
@@ -72,10 +78,10 @@ export function QuestionRenderer({
       {showStemBlock && renderStem(content.stem) && (
         <div className="stem">{renderStem(content.stem)}</div>
       )}
-      {hasCode ? (
+      {showCode ? (
         <InformaticsCodeRenderer codeBlocks={codeBlocks} codeDisplay={codeDisplay} />
       ) : null}
-      {showStemBlock && content.stemAfter ? (
+      {showStemAfter ? (
         <div className="stem stem-after-code">
           <RichTextContent content={content.stemAfter} />
         </div>

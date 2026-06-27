@@ -16,6 +16,7 @@
 - **PIN**: 8 chữ số ngẫu nhiên
 - **Login**: Student uses **Tài khoản thi** (not SBD); SBD remains on slip/display
 - **release_mode**: `proctor_at_time` — proctor opens subject slots manually
+- **i18n exam UI**: `vi.exam.answeredCount`, `emptyQuestions`, `renderError` — dùng bởi `ExamPage` (Edge) và `ExamPreviewPanel` (Composer); đồng bộ qua `node scripts/kit-sync-check.mjs`
 - **Submit result**: `partScores` (Phần I/II/III)
 - **Branding**: `manifest.branding` + `media/branding/logo.png` in ZIP
 
@@ -77,13 +78,12 @@ Expected names: `BeVietnamPro-Regular.woff2`, `BeVietnamPro-SemiBold.woff2`, `Be
 
 CSS loads local `/fonts/` first; system UI fallback if files are missing.
 
-## Docker
+## Native reverse proxy
 
-- nginx `client_max_body_size`: **100M** (matches kit `MAX_ZIP_BYTES`)
-- `Dockerfile.api` builds `exam-package-kit`
-- HA: `docker/postgres/primary.conf` + `docker/nginx/ha.conf` (100M upload)
-
-Build SPAs before HA compose: `npm run build` then mount `student/dist` and `proctor/dist` per `docker-compose.yml`.
+- nginx `client_max_body_size`: **100M** (khớp kit `MAX_ZIP_BYTES`)
+- Windows: `scripts/nginx-native.conf` → `tools/nginx/` qua `run-nginx-portable.ps1`
+- Ubuntu: `setup-linux.sh` sinh site nginx từ cùng template
+- Build SPA trước ngày thi: `npm run build`
 
 ## Tests
 

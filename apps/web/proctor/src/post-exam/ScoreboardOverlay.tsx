@@ -23,18 +23,6 @@ export interface SubjectRoomCompleteData {
   forced?: boolean;
 }
 
-const SIG_KEY = 'vnu_proctor_signatures';
-
-function loadSigs() {
-  try {
-    const raw = localStorage.getItem(SIG_KEY);
-    if (raw) return JSON.parse(raw) as { proctor1Name?: string; proctor2Name?: string; signature1?: string; signature2?: string };
-  } catch {
-    /* ignore */
-  }
-  return {};
-}
-
 export function ScoreboardOverlay({
   data,
   token,
@@ -50,22 +38,17 @@ export function ScoreboardOverlay({
 
   const download = async (format: 'pdf' | 'xlsx') => {
     if (!hasSubject) {
-      setMsg('Thiếu mã môn thi — không thể tải biên bản.');
+      setMsg('Thiếu mã môn thi — không thể tải danh sách.');
       return;
     }
     setBusy(format);
     setMsg('');
     try {
-      const sigs = loadSigs();
       const params = new URLSearchParams({
         subjectCode: data.subjectCode.trim(),
         room: data.room,
         format,
-        proctor1Name: sigs.proctor1Name ?? '',
-        proctor2Name: sigs.proctor2Name ?? '',
       });
-      if (sigs.signature1) params.set('signature1', sigs.signature1);
-      if (sigs.signature2) params.set('signature2', sigs.signature2);
       const res = await proctorFetch(
         `/proctor/sessions/${data.examSessionId}/room-score-sheet?${params}`,
         token,
@@ -77,17 +60,17 @@ export function ScoreboardOverlay({
       a.href = URL.createObjectURL(blob);
       const date = new Date();
       const ymd = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-      a.download = `BienBanDiem_${data.subjectCode}_${data.room.replace(/\s+/g, '_')}_${ymd}.${pdfFallback || format === 'xlsx' ? 'xlsx' : 'pdf'}`;
+      a.download = `DanhSachDiem_${data.subjectCode}_${data.room.replace(/\s+/g, '_')}_${ymd}.${pdfFallback || format === 'xlsx' ? 'xlsx' : 'pdf'}`;
       a.click();
       setMsg(
         pdfFallback
-          ? 'PDF không khả dụng — đã tải Excel biên bản thay thế.'
+          ? 'PDF không khả dụng — đã tải Excel thay thế.'
           : format === 'pdf'
-            ? 'Đã tải PDF biên bản.'
-            : 'Đã tải Excel biên bản.',
+            ? 'Đã tải PDF danh sách điểm.'
+            : 'Đã tải Excel danh sách điểm.',
       );
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Tải biên bản thất bại');
+      setMsg(e instanceof Error ? e.message : 'Tải danh sách thất bại');
     } finally {
       setBusy(null);
     }

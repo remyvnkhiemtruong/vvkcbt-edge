@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { parseEdgeCorsOrigins } from './shared/cors-origins';
 
 config({ path: resolve(__dirname, '../../../.env') });
 
@@ -27,16 +28,14 @@ function validateProductionSecrets() {
 }
 
 function parseCorsOrigins(): string[] | boolean {
-  const raw = process.env.EDGE_ORIGINS?.trim();
-  if (!raw) return process.env.NODE_ENV === 'production' ? false : true;
-  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+  return parseEdgeCorsOrigins();
 }
 
 async function bootstrap() {
   validateProductionSecrets();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.set('trust proxy', 1);
-  const uploadDir = process.env.UPLOAD_DIR || resolve(__dirname, '../../../uploads');
+  const uploadDir = resolve(process.env.UPLOAD_DIR || resolve(__dirname, '../../../uploads'));
   app.useStaticAssets(uploadDir, { prefix: '/uploads/' });
   app.setGlobalPrefix('api');
   const origins = parseCorsOrigins();

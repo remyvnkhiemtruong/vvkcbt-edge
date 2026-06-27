@@ -201,6 +201,101 @@
   font-size: 0.9rem;
 }
 
+.proctor-open-bar {
+  margin-bottom: 0.75rem;
+}
+
+.proctor-open-bar--compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--proctor-surface);
+  border: 1px solid var(--proctor-border);
+  border-radius: var(--cbt-radius-sm);
+}
+
+.proctor-open-bar__title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--proctor-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.proctor-open-bar__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  flex: 1;
+}
+
+.proctor-open-bar__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.proctor-open-bar__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--proctor-text);
+}
+
+.proctor-open-bar__time {
+  font-size: 0.78rem;
+  color: var(--proctor-text-secondary);
+}
+
+.proctor-open-bar__status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+}
+
+.proctor-open-bar__status--scheduled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.proctor-open-bar__status--open,
+.proctor-open-bar__status--partial {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.proctor-open-bar__status--locked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.proctor-open-bar__status--completed {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.proctor-open-bar__done {
+  color: #86efac;
+  font-weight: 700;
+}
+
+.proctor-open-bar__msg {
+  width: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: #86efac;
+}
+
+.proctor-open-schedule {
+  margin-bottom: 1rem;
+}
+
 .cbt-app-window--dark .proctor-schedule-table {
   color: var(--proctor-text);
 }

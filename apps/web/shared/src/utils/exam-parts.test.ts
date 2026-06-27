@@ -1,7 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { getDefaultStructure, TN_THPT_SUBJECTS } from '@vnu/shared-types';
-import { buildExamParts, buildViewGroups, findPartIndex, findViewGroupIndex } from './exam-clusters';
+import {
+  buildClusterRuns,
+  buildExamParts,
+  buildViewGroups,
+  findPartIndex,
+  findViewGroupIndex,
+  getVisibleClusterRuns,
+  shouldUseStemSplit,
+} from './exam-clusters';
 import type { ExamQuestion } from '../components/ExamViewShell';
 
 function makeQuestions(subjectCode: string): ExamQuestion[] {
@@ -51,6 +59,88 @@ describe('buildExamParts', () => {
       assert.equal(total, qs.length, meta.code);
     });
   }
+});
+
+describe('shouldUseStemSplit', () => {
+  it('enables horizontal stem split for true_false and short_answer in split_view', () => {
+    const tf = buildClusterRuns(
+      [{ id: '1', type: 'true_false', content: { stem: 'Đề', statements: ['a', 'b'] } }],
+      0,
+      0,
+    )[0];
+    const sa = buildClusterRuns(
+      [{ id: '2', type: 'short_answer', content: { stem: 'Tính' } }],
+      0,
+      0,
+    )[0];
+    assert.equal(shouldUseStemSplit(tf, 'split_view'), true);
+    assert.equal(shouldUseStemSplit(sa, 'split_view'), true);
+    assert.equal(shouldUseStemSplit(tf, 'vertical_focus'), false);
+  });
+
+  it('does not stem-split English clusters (passage panel handles them)', () => {
+    const run = buildClusterRuns(
+      [
+        {
+          id: '1',
+          type: 'cluster_mcq',
+          clusterId: 'c1',
+          content: { passage: 'Passage', stem: 'Q1', options: ['A. x'] },
+        },
+      ],
+      0,
+      0,
+    )[0];
+    assert.equal(shouldUseStemSplit(run, 'split_view'), false);
+  });
+
+  it('enables stem split for mcq in split_view', () => {
+    const run = buildClusterRuns(
+      [{ id: '1', type: 'mcq', content: { stem: 'Tính', options: ['A. 1', 'B. 2'] } }],
+      0,
+      0,
+    )[0];
+    assert.equal(shouldUseStemSplit(run, 'split_view'), true);
+  });
+});
+
+describe('getVisibleClusterRuns', () => {
+  const qs: ExamQuestion[] = [
+    { id: '1', type: 'short_answer', content: { stem: 'Q17' } },
+    { id: '2', type: 'short_answer', content: { stem: 'Q18' } },
+    {
+      id: '3',
+      type: 'cluster_mcq',
+      clusterId: 'en1',
+      content: { passage: 'Passage', stem: 'Q19', options: ['A. x'] },
+    },
+    {
+      id: '4',
+      type: 'cluster_mcq',
+      clusterId: 'en1',
+      content: { passage: 'Passage', stem: 'Q20', options: ['A. y'] },
+    },
+  ];
+
+  it('split_view shows only current solo question', () => {
+    const runs = buildClusterRuns(qs, 0, 3);
+    const visible = getVisibleClusterRuns(runs, 1, 'split_view');
+    assert.equal(visible.length, 1);
+    assert.equal(visible[0].questions.length, 1);
+    assert.equal(visible[0].questions[0].globalIdx, 1);
+  });
+
+  it('split_view shows full English cluster when on any question in cluster', () => {
+    const runs = buildClusterRuns(qs, 0, 3);
+    const visible = getVisibleClusterRuns(runs, 3, 'split_view');
+    assert.equal(visible.length, 1);
+    assert.equal(visible[0].questions.length, 2);
+  });
+
+  it('vertical_focus shows all runs in part', () => {
+    const runs = buildClusterRuns(qs, 0, 3);
+    assert.equal(getVisibleClusterRuns(runs, 1, 'vertical_focus').length, runs.length);
+  });
 });
 
 describe('buildViewGroups', () => {

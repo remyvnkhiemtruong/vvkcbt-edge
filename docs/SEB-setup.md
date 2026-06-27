@@ -8,7 +8,7 @@
 
 - Windows 10/11 trên máy thí sinh
 - [Safe Exam Browser](https://safeexambrowser.org/download_en.html) (SEB) 3.x
-- Máy Edge (giám thị) chạy Docker stack — xem `OFFLINE-LAN.md`
+- Máy Edge (giám thị) chạy native stack — `scripts\start-edge-server.bat` — xem `OFFLINE-LAN.md`
 
 ## Cấu hình nhanh
 

@@ -3,17 +3,16 @@ import { KaTeXBlock } from './KaTeXBlock';
 import { SyntaxHighlightedCode } from './SyntaxHighlightedCode';
 import { highlightCodeSource, normalizeHighlightLanguage } from '../utils/highlight-code';
 import { INLINE_TOKEN_RE } from '../utils/rich-text-parser';
+import { resolveUploadMediaUrl } from '../utils/media-url';
 
 const FENCED_CODE_RE = /```(\w+)?\n?([\s\S]*?)```/g;
 
 function imageSrc(path: string): string {
-  const trimmed = path.trim();
-  if (trimmed.startsWith('http') || trimmed.startsWith('/')) return trimmed;
-  return `/api/uploads/${trimmed.replace(/^uploads\//, '')}`;
+  return resolveUploadMediaUrl(path);
 }
 
 function audioSrc(path: string): string {
-  return imageSrc(path);
+  return resolveUploadMediaUrl(path);
 }
 
 function renderInline(text: string, keyPrefix: string) {

@@ -129,6 +129,7 @@ export const DEFAULT_SCHOOL_NAME = 'THPT Võ Văn Kiệt';
 export const DEFAULT_SCHOOL_CODE = 'VVK001';
 
 export * from './scoring';
+export * from './short-answer';
 export * from './informatics-branch';
 export * from './routing';
 export * from './exam-structure';

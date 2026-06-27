@@ -4,6 +4,7 @@ import {
   GracePeriodOverlay,
   CbtBrandLogo,
   ExamViewShell,
+  ExamErrorBoundary,
   ExamQuestionPalette,
   ExamThemeToggle,
   useExamTheme,
@@ -12,6 +13,7 @@ import {
   buildExamParts,
   findPartIndex,
   countAnswered,
+  isQuestionAnswered,
   type ExamQuestion,
   type ExamUiMode,
   ApiStatusBanner,
@@ -36,7 +38,7 @@ function formatTimer(sec: number): string {
 }
 
 export default function ExamPage() {
-  const { exam, answers, locked, setExam, setAnswer, setAnswers, setLocked, sessionId, sbd, examAccount } =
+  const { exam, answers, markedQuestions, locked, setExam, setAnswer, setAnswers, setLocked, sessionId, sbd, examAccount, toggleMarkQuestion, unmarkQuestion } =
     useExamStore();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [remainingSec, setRemainingSec] = useState(5400);
@@ -44,8 +46,9 @@ export default function ExamPage() {
   const [uiOverride, setUiOverride] = useState<ExamUiMode | null>(null);
   const [fontScaleIdx, setFontScaleIdx] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const { theme, isDark, toggle: toggleTheme } = useExamTheme();
-  const { blurred, violations } = useFocusGuard(true);
+  const { blurred, violations } = useFocusGuard(!!exam && !locked);
 
   const autosaveInterval = (exam?.rules as { proctoring?: { autosave_interval_sec?: number } })
     ?.proctoring?.autosave_interval_sec ?? 3;
@@ -63,6 +66,7 @@ export default function ExamPage() {
   } = useExamSubmit(sessionId);
 
   const loadExam = useCallback(async () => {
+    setLoadError('');
     const data = await studentApi.getExam();
     if (!data.examStarted) {
       useExamStore.getState().setRulesAccepted(false);
@@ -83,7 +87,10 @@ export default function ExamPage() {
   }, [setExam]);
 
   useEffect(() => {
-    loadExam().catch(console.error);
+    loadExam().catch((err) => {
+      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được đề thi');
+    });
   }, [loadExam]);
 
   useEffect(() => {
@@ -108,13 +115,7 @@ export default function ExamPage() {
     socket.on('time_extend', onTimeExtend);
     socket.on('reset_session', onResetSession);
 
-    const hb = setInterval(() => {
-      studentApi.heartbeat().catch(() => {});
-      socket.emit('heartbeat', { sessionId });
-    }, 5000);
-
     return () => {
-      clearInterval(hb);
       socket.off('force_lock', onForceLock);
       socket.off('force_submit', onForceSubmit);
       socket.off('time_extend', onTimeExtend);
@@ -157,7 +158,10 @@ export default function ExamPage() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
-  const questions = useMemo(() => ((exam?.questions as ExamQuestion[]) || []), [exam?.questions]);
+  const questions = useMemo(() => {
+    const raw = exam?.questions;
+    return Array.isArray(raw) ? (raw as ExamQuestion[]) : [];
+  }, [exam?.questions]);
   const partOrder = useMemo(() => {
     const parts = (exam?.rules as { structureTemplate?: { parts?: Record<string, unknown> } })
       ?.structureTemplate?.parts;
@@ -172,8 +176,11 @@ export default function ExamPage() {
   const handleAnswerChange = useCallback(
     (questionId: string, value: unknown) => {
       setAnswer(questionId, value);
+      if (isQuestionAnswered(value)) {
+        unmarkQuestion(questionId);
+      }
     },
-    [setAnswer],
+    [setAnswer, unmarkQuestion],
   );
 
   const scrollToQuestion = useCallback((idx: number) => {
@@ -305,8 +312,34 @@ export default function ExamPage() {
     });
   }, [currentIdx, uiMode, exam]);
 
+  if (loadError) {
+    return (
+      <div className="loading">
+        <div>
+          <p>{loadError}</p>
+          <button type="button" className="cbt-btn cbt-btn-primary" style={{ marginTop: '1rem' }} onClick={() => loadExam()}>
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!exam) return <div className="loading">{vi.exam.loading}</div>;
+  if (questions.length === 0) {
+    return (
+      <div className="exam-page" data-exam-theme={theme}>
+        <div className="exam-empty-state">
+          <p>{vi.exam.emptyQuestions}</p>
+          <button type="button" className="cbt-btn cbt-btn-primary" style={{ marginTop: '1rem' }} onClick={() => loadExam()}>
+            Tải lại
+          </button>
+        </div>
+      </div>
+    );
+  }
   const sessionName = (exam.sessionName as string) || '';
+  const subjectCode = (exam.subject as string) || undefined;
   const audioRules = (exam.rules as { audio?: { max_plays?: number } })?.audio;
   const maxViolations =
     (exam?.rules as { proctoring?: { max_focus_violations?: number } })?.proctoring?.max_focus_violations ?? 3;
@@ -362,7 +395,7 @@ export default function ExamPage() {
       <header className="exam-topbar">
         <div className="exam-topbar__left">
           <div className="exam-topbar__brand">
-            <CbtBrandLogo size={40} />
+            <CbtBrandLogo size={40} showSchoolName />
           </div>
         </div>
 
@@ -394,7 +427,7 @@ export default function ExamPage() {
             className="exam-icon-btn"
             title={vi.exam.callProctor}
             onClick={() =>
-              socketRef.current?.emit('help_request', {
+              getStudentSocket()?.emit('help_request', {
                 sessionId,
                 reason: vi.exam.callProctorReason,
               })
@@ -483,24 +516,38 @@ export default function ExamPage() {
       />
 
       <div className="exam-main">
-        <ExamViewShell
-          questions={questions}
-          answers={answers}
-          uiMode={uiMode}
-          fontScale={FONT_SCALES[fontScaleIdx]}
-          onViewModeChange={(mode) => setUiOverride(mode)}
-          currentIdx={currentIdx}
-          onCurrentIdxChange={setCurrentIdx}
-          onChange={handleAnswerChange}
-          onQuestionClick={(i) => studentApi.auditClick(`q-${i}`).catch(() => {})}
-          subjectCode={subjectCode}
-          partOrder={partOrder}
-        />
+        <ExamErrorBoundary
+          fallback={
+            <div className="exam-empty-state">
+              <p>{vi.exam.renderError}</p>
+              <button type="button" className="cbt-btn cbt-btn-primary" style={{ marginTop: '1rem' }} onClick={() => loadExam()}>
+                Tải lại đề
+              </button>
+            </div>
+          }
+        >
+          <ExamViewShell
+            questions={questions}
+            answers={answers}
+            markedQuestionIds={markedQuestions}
+            onToggleMark={locked ? undefined : toggleMarkQuestion}
+            uiMode={uiMode}
+            fontScale={FONT_SCALES[fontScaleIdx]}
+            onViewModeChange={(mode) => setUiOverride(mode)}
+            currentIdx={currentIdx}
+            onCurrentIdxChange={setCurrentIdx}
+            onChange={handleAnswerChange}
+            onQuestionClick={(i) => studentApi.auditClick(`q-${i}`).catch(() => {})}
+            subjectCode={subjectCode}
+            partOrder={partOrder}
+          />
+        </ExamErrorBoundary>
       </div>
 
       <ExamQuestionPalette
         questions={questions}
         answers={answers}
+        markedQuestionIds={markedQuestions}
         currentIdx={currentIdx}
         partOrder={partOrder}
         onSelect={(i) => {

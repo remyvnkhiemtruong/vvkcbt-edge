@@ -12,6 +12,7 @@ import { GdptSubjectStream } from '../database/entities/gdpt-subject-stream.enti
 import { StudentSubjectSlot } from '../database/entities/student-subject-slot.entity';
 import { AppealRequest } from '../database/entities/appeal-request.entity';
 import { QuestionCluster } from '../database/entities/question-cluster.entity';
+import { MediaAsset } from '../database/entities/media-asset.entity';
 import { TnptComboCatalog } from '../database/entities/tnpt-combo-catalog.entity';
 import { ExamStructureTemplate } from '../database/entities/exam-structure-template.entity';
 import { StudentAuthController } from './auth/student-auth.controller';
@@ -48,6 +49,7 @@ const lightweight = isEdgeLightweight();
       StudentSubjectSlot,
       AppealRequest,
       QuestionCluster,
+      MediaAsset,
       TnptComboCatalog,
       ExamStructureTemplate,
     ]),

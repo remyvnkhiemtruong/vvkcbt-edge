@@ -1,18 +1,75 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CbtCard, CbtBrandLogo, vi, isProductionUi, isRunningInSEB, requiresSebLock, translateApiError } from '@shared/index';
+import { CbtBrandLogo, vi, isProductionUi, isRunningInSEB, requiresSebLock, translateApiError } from '@shared/index';
 import { studentApi } from '../api';
+import { useExamStore } from '../store';
 
 interface Props {
   onAccepted: () => void;
 }
 
-const RULES = [
-  'Thí sinh không được rời khỏi màn hình thi trong quá trình làm bài.',
-  'Không sử dụng tài liệu, thiết bị điện tử hoặc trao đổi với người khác.',
-  'Hệ thống tự động lưu bài làm mỗi 3 giây; vi phạm focus quá 3 lần sẽ bị báo giám thị.',
-  'Khi hết giờ làm bài, bài thi sẽ được nộp tự động.',
-  'Đồng hồ làm bài chỉ chạy sau khi bạn bấm «Bắt đầu làm bài» — có thể làm hết thời gian quy định kể cả khi đã quá giờ kết thúc ca (nếu đã bắt đầu trong ca).',
+const RULES: { icon: 'screen' | 'shield' | 'save' | 'timer' | 'clock'; text: string }[] = [
+  {
+    icon: 'screen',
+    text: 'Thí sinh không được rời khỏi màn hình thi trong quá trình làm bài.',
+  },
+  {
+    icon: 'shield',
+    text: 'Không sử dụng tài liệu, thiết bị điện tử hoặc trao đổi với người khác.',
+  },
+  {
+    icon: 'save',
+    text: 'Hệ thống tự động lưu bài làm mỗi 3 giây.',
+  },
+  {
+    icon: 'timer',
+    text: 'Khi hết giờ làm bài, bài thi sẽ được nộp tự động.',
+  },
+  {
+    icon: 'clock',
+    text: 'Đồng hồ làm bài chỉ chạy sau khi bạn bấm «Bắt đầu làm bài».',
+  },
 ];
+
+function RuleIcon({ type }: { type: (typeof RULES)[number]['icon'] }) {
+  const common = { width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (type) {
+    case 'screen':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden {...common}>
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <path d="M8 21h8M12 17v4" />
+        </svg>
+      );
+    case 'shield':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden {...common}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+      );
+    case 'save':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden {...common}>
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <path d="M17 21v-8H7v8M7 3v5h8" />
+        </svg>
+      );
+    case 'timer':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden {...common}>
+          <circle cx="12" cy="13" r="8" />
+          <path d="M12 9v4l2.5 2.5M9 2h6" />
+        </svg>
+      );
+    case 'clock':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      );
+  }
+}
 
 function DiagnosticGate({ onPass }: { onPass: () => void }) {
   const [results, setResults] = useState<Array<{ ok: boolean; text: string; fail?: boolean }>>([]);
@@ -36,7 +93,7 @@ function DiagnosticGate({ onPass }: { onPass: () => void }) {
     if (w < 1024 || h < 768) {
       checks.push({ ok: false, text: vi.diagnostic.resolutionFail(w, h), fail: true });
     } else {
-      checks.push({ ok: true, text: `Độ phân giải: ${w}x${h} — OK` });
+      checks.push({ ok: true, text: `Độ phân giải: ${w}×${h} — OK` });
     }
 
     const pingStart = performance.now();
@@ -76,41 +133,44 @@ function DiagnosticGate({ onPass }: { onPass: () => void }) {
     runChecks();
   }, [runChecks]);
 
-  if (results.length === 0) return <p>Đang quét hệ thống...</p>;
+  if (results.length === 0) {
+    return (
+      <div className="rules-page__diag-bar" aria-live="polite">
+        <span className="rules-page__spinner" aria-hidden />
+        <span>Đang kiểm tra máy trạm…</span>
+      </div>
+    );
+  }
+
+  if (!failed) return null;
 
   return (
-    <div
-      className="diagnostic-modal"
-      style={{ border: failed ? '2px solid var(--cbt-danger)' : '1px solid var(--cbt-border)' }}
-    >
-      <h3>{vi.diagnostic.title}</h3>
-      <hr />
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {results.map((r, i) => (
-          <li
-            key={i}
-            style={{
-              padding: '0.5rem',
-              marginBottom: '0.35rem',
-              background: r.fail || !r.ok ? 'var(--cbt-danger-bg)' : 'transparent',
-              color: r.fail || !r.ok ? 'var(--cbt-danger)' : 'var(--cbt-success)',
-            }}
-          >
-            [{r.ok ? '✓' : '✗'}] {r.text}
+    <div className="rules-page__diagnostic rules-page__diagnostic--fail">
+      <p className="rules-page__diagnostic-title">{vi.diagnostic.title}</p>
+      <ul className="rules-page__diagnostic-list">
+        {results.filter((r) => r.fail || !r.ok).map((r, i) => (
+          <li key={i} className="rules-page__diagnostic-item rules-page__diagnostic-item--fail">
+            <span className="rules-page__diagnostic-icon" aria-hidden>✗</span>
+            <span>{r.text}</span>
           </li>
         ))}
       </ul>
-      {failed && (
-        <button
-          type="button"
-          className="cbt-btn cbt-btn-danger"
-          style={{ width: '100%', marginTop: '1rem' }}
-          onClick={() => window.alert('Đã gửi yêu cầu đổi máy tới giám thị. Vui lòng chờ hỗ trợ.')}
-        >
-          {vi.diagnostic.requestChange}
-        </button>
-      )}
+      <button
+        type="button"
+        className="cbt-btn cbt-btn-danger rules-page__diagnostic-action"
+        onClick={() => window.alert('Đã gửi yêu cầu đổi máy tới giám thị. Vui lòng chờ hỗ trợ.')}
+      >
+        {vi.diagnostic.requestChange}
+      </button>
     </div>
+  );
+}
+
+function StartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
 }
 
@@ -126,7 +186,8 @@ export default function RulesPage({ onAccepted }: Props) {
     setStarting(true);
     setStartError('');
     try {
-      await studentApi.startExam();
+      const data = await studentApi.startExam();
+      useExamStore.getState().setExam(data);
       onAccepted();
       if (!isRunningInSEB()) {
         try {
@@ -143,49 +204,83 @@ export default function RulesPage({ onAccepted }: Props) {
   };
 
   return (
-    <div className="rules-page">
+    <div className={`rules-page${!production ? ' rules-page--spec' : ''}`}>
       {!production && (
         <div className="rules-page__feature">
           <h1>TÍNH NĂNG 2–3. NỘI QUY & PHÒNG CHỜ</h1>
           <p>{vi.subtitle}</p>
         </div>
       )}
-      <CbtCard>
-        <div className="rules-page__brand">
-          <CbtBrandLogo
-            variant="login"
-            size={72}
-            showSchoolName
-            layout="stack"
-            align="center"
-          />
+
+      <div className="rules-page__window">
+        <div className="rules-page__topbar">
+          <CbtBrandLogo variant="header" size={32} />
+          <span className="rules-page__topbar-title">{vi.rules.title}</span>
         </div>
-        <h1 style={{ color: 'var(--cbt-primary)', textAlign: 'center' }}>{vi.rules.title}</h1>
-        <ul style={{ lineHeight: 1.7, margin: '1rem 0' }}>
-          {RULES.map((r, i) => (
-            <li key={i}>{r}</li>
-          ))}
-        </ul>
-        {!diagOk && <DiagnosticGate onPass={() => setDiagOk(true)} />}
-        {diagOk && (
-          <>
-            <label className="rules-check">
-              <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-              {vi.rules.accept}
-            </label>
-            <button
-              type="button"
-              className="cbt-btn cbt-btn-primary"
-              style={{ width: '100%' }}
-              disabled={!checked || starting}
-              onClick={handleStart}
-            >
-              {starting ? 'Đang mở đề…' : vi.rules.start}
-            </button>
-            {startError && <p className="cbt-error-text" style={{ marginTop: '0.75rem' }}>{startError}</p>}
-          </>
-        )}
-      </CbtCard>
+
+        <div className="rules-page__body">
+          <p className="rules-page__lead">Đọc kỹ các quy định dưới đây trước khi vào phòng thi</p>
+
+          <ol className="rules-page__list">
+            {RULES.map((rule, i) => (
+              <li key={i} className="rules-page__rule">
+                <span className="rules-page__rule-num" aria-hidden>{i + 1}</span>
+                <span className="rules-page__rule-icon" aria-hidden>
+                  <RuleIcon type={rule.icon} />
+                </span>
+                <p className="rules-page__rule-text">{rule.text}</p>
+              </li>
+            ))}
+          </ol>
+
+          <div className="rules-page__footer-panel">
+            {!diagOk && <DiagnosticGate onPass={() => setDiagOk(true)} />}
+
+            <div className="rules-page__footer-actions">
+              <label className={`rules-page__accept ${checked ? 'rules-page__accept--checked' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="rules-page__accept-input"
+                  checked={checked}
+                  onChange={(e) => setChecked(e.target.checked)}
+                />
+                <span className="rules-page__accept-box" aria-hidden />
+                <span className="rules-page__accept-text">{vi.rules.accept}</span>
+              </label>
+
+              <button
+                type="button"
+                className="cbt-btn rules-page__start-btn"
+                disabled={!checked || !diagOk || starting}
+                onClick={handleStart}
+              >
+                {starting ? (
+                  <>
+                    <span className="rules-page__spinner rules-page__spinner--btn" aria-hidden />
+                    Đang mở đề…
+                  </>
+                ) : (
+                  <>
+                    <StartIcon />
+                    {vi.rules.start}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {startError && (
+              <div className="rules-page__error-block">
+                <p className="rules-page__error">{startError}</p>
+                {(startError.includes('Chờ giám thị mở đề') ||
+                  startError.includes('chờ giám thị mở đề')) && (
+                  <p className="rules-page__error-hint">{vi.rules.waitProctorOpen}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {!production && (
         <footer className="rules-page__footer">
           <span>Trang 2/24</span>

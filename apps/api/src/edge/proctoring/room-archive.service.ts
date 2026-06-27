@@ -19,8 +19,6 @@ import { StudentSessionStatus } from '@vnu/shared-types';
 
 export interface RoomArchiveOptions {
   room?: string;
-  proctor1Name?: string;
-  proctor2Name?: string;
 }
 
 @Injectable()
@@ -80,12 +78,10 @@ export class RoomArchiveService {
           subjectCode,
           room: roomName,
           format: 'pdf',
-          proctor1Name: opts.proctor1Name,
-          proctor2Name: opts.proctor2Name,
         });
         const ext = pdfResult.format === 'pdf' ? 'pdf' : 'xlsx';
         addFile(
-          `bien-ban-diem/BienBanDiem_${subjectCode}_${roomName.replace(/\s+/g, '_')}.${ext}`,
+          `danh-sach-diem/DanhSachDiem_${subjectCode}_${roomName.replace(/\s+/g, '_')}.${ext}`,
           pdfResult.buffer,
         );
         if (pdfResult.format === 'pdf') {
@@ -93,11 +89,9 @@ export class RoomArchiveService {
             subjectCode,
             room: roomName,
             format: 'xlsx',
-            proctor1Name: opts.proctor1Name,
-            proctor2Name: opts.proctor2Name,
           });
           addFile(
-            `bien-ban-diem/BienBanDiem_${subjectCode}_${roomName.replace(/\s+/g, '_')}.xlsx`,
+            `danh-sach-diem/DanhSachDiem_${subjectCode}_${roomName.replace(/\s+/g, '_')}.xlsx`,
             xlsxResult.buffer,
           );
         }

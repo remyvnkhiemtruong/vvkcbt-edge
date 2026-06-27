@@ -84,6 +84,62 @@ export function clusterRunHasContext(run: ExamClusterRun): boolean {
   return !!(run.instruction?.trim() || run.passage?.trim());
 }
 
+/** Đúng/sai, trả lời ngắn, TNKQ: tách đề bên trái, phần trả lời bên phải (chế độ ngang). */
+export function shouldUseStemSplit(
+  run: ExamClusterRun,
+  uiMode: 'split_view' | 'vertical_focus',
+): boolean {
+  if (uiMode !== 'split_view') return false;
+  if (clusterRunHasContext(run)) return false;
+  const q = run.questions[0]?.q;
+  if (!q) return false;
+  const t = q.type ?? '';
+  if (t === 'true_false' || t === 'short_answer' || t === 'mcq') return true;
+  if (t === 'cluster_mcq') {
+    const stem = q.content?.stem;
+    return !!(getQuestionPassageText(q) || (typeof stem === 'string' && stem.trim()));
+  }
+  return false;
+}
+
+/**
+ * Chế độ ngang: một câu mỗi lần (đề trái / đáp án phải);
+ * câu chùm có đoạn văn: đoạn trái, toàn bộ câu trong chùm phải.
+ */
+export function getVisibleClusterRuns(
+  runs: ExamClusterRun[],
+  currentIdx: number,
+  uiMode: 'split_view' | 'vertical_focus',
+): ExamClusterRun[] {
+  if (uiMode !== 'split_view' || runs.length === 0) return runs;
+
+  const run = runs.find((r) => r.questions.some(({ globalIdx }) => globalIdx === currentIdx));
+  if (!run) return runs;
+
+  if (clusterRunHasContext(run)) {
+    return [run];
+  }
+
+  const active = run.questions.filter(({ globalIdx }) => globalIdx === currentIdx);
+  if (active.length === 0) return runs;
+  return [{ ...run, questions: active }];
+}
+
+export function getExamViewRangeLabel(
+  uiMode: 'split_view' | 'vertical_focus',
+  currentIdx: number,
+  part: ExamPart,
+  questionNum: (n: number) => string,
+): string {
+  if (uiMode === 'split_view') {
+    return questionNum(currentIdx + 1);
+  }
+  if (part.start === part.end) {
+    return questionNum(part.start + 1);
+  }
+  return `Câu ${part.start + 1}–${part.end + 1}`;
+}
+
 /** Nhóm câu liên tiếp cùng cluster (cùng hướng dẫn / đoạn văn). */
 export function buildClusterRuns(questions: ExamQuestion[], partStart: number, partEnd: number): ExamClusterRun[] {
   const runs: ExamClusterRun[] = [];

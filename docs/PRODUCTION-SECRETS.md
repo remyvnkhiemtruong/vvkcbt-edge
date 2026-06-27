@@ -8,13 +8,13 @@ Dùng trước ngày thi thật (`NODE_ENV=production`).
 - [ ] `ANONYMIZATION_SALT` — chuỗi ngẫu nhiên riêng
 - [ ] `AUDIO_ENCRYPTION_KEY` — đúng 32 byte hex
 - [ ] `ADMIN_PASSWORD_HASH` — bcrypt (`node scripts/hash-password.mjs <pass>`)
-- [ ] Tài khoản giám thị qua `start-proctor-edge.bat` / `seed-proctor-user.mjs` — **không** dùng `proctor123`
+- [ ] Giám thị: **`proctor` / `proctor123`** (tài khoản cố định, API tự đồng bộ khi khởi động)
 - [ ] `EDGE_ORIGINS` — chỉ IP/host LAN thực tế (không `*`)
 
 ## Khuyến nghị
 
 - [ ] `BACKUP_PASSPHRASE` — mã hóa backup at rest
-- [ ] Đổi mật khẩu Postgres trong `docker-compose` / `DATABASE_URL`
+- [ ] Đổi mật khẩu Postgres trong `DATABASE_URL` (user `vnu`)
 - [ ] Tắt port 3000 ra ngoài LAN (chỉ nginx :80)
 - [ ] Helmet + CORS đã bật trên API (`main.ts`)
 - [ ] WebSocket CORS dùng `EDGE_ORIGINS` (`proctoring.gateway.ts`)

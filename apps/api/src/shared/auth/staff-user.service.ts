@@ -1,16 +1,49 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { StaffUser } from '../../database/entities/staff-user.entity';
 import { StaffRole } from '../guards/staff-auth.guard';
+import { DEFAULT_PROCTOR_PASSWORD, DEFAULT_PROCTOR_USERNAME } from './staff-defaults';
 
 @Injectable()
-export class StaffUserService {
+export class StaffUserService implements OnModuleInit {
+  private readonly logger = new Logger(StaffUserService.name);
+
   constructor(
     @InjectRepository(StaffUser)
     private readonly repo: Repository<StaffUser>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.ensureDefaultProctorUser();
+    } catch (err) {
+      this.logger.warn(
+        `Không đồng bộ tài khoản giám thị mặc định: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /** Luôn có user proctor/proctor123 trong DB (đồng bộ mỗi lần khởi động API). */
+  async ensureDefaultProctorUser() {
+    const hash = await bcrypt.hash(DEFAULT_PROCTOR_PASSWORD, 10);
+    const existing = await this.repo.findOne({ where: { username: DEFAULT_PROCTOR_USERNAME } });
+    if (existing) {
+      existing.passwordHash = hash;
+      existing.role = 'proctor';
+      await this.repo.save(existing);
+      return;
+    }
+    await this.repo.save(
+      this.repo.create({
+        username: DEFAULT_PROCTOR_USERNAME,
+        role: 'proctor',
+        passwordHash: hash,
+        schoolId: null,
+      }),
+    );
+  }
 
   list() {
     return this.repo.find({ order: { username: 'ASC' }, select: ['id', 'username', 'role', 'schoolId', 'createdAt'] });

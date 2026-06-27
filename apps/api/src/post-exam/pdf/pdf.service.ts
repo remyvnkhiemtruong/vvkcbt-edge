@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as puppeteer from 'puppeteer';
+import { launchPdfBrowser } from '../../shared/utils/puppeteer-launch';
 import { StudentSession } from '../../database/entities/student-session.entity';
 
 @Injectable()
@@ -33,16 +33,15 @@ export class PdfService {
 
     const html = this.renderHtml(session, questions, answers, breakdown);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox'],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdf = await page.pdf({ format: 'A4', printBackground: true });
-    await browser.close();
-    return Buffer.from(pdf);
+    const browser = await launchPdfBrowser();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'load' });
+      const pdf = await page.pdf({ format: 'A4', printBackground: true });
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
+    }
   }
 
   private esc(s: string): string {

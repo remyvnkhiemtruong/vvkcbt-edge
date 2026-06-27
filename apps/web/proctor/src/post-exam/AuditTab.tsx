@@ -83,9 +83,6 @@ export function AuditTab({ token, examSessionId }: { token: string; examSessionI
           Xuất CSV
         </button>
       </div>
-      <p className="admin-hint">
-        Ghi nhận ai thực hiện (thí sinh hoặc giám thị), hành động và thời điểm trong ca thi.
-      </p>
       <div className="proctor-table-wrap">
         <CbtDataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
       </div>

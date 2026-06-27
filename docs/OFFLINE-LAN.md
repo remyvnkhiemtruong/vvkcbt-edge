@@ -74,13 +74,15 @@ node scripts/edge-bootstrap.mjs
 | Giám thị | `http://<IP>/proctor/` |
 | Health | `http://<IP>/api/infra/health` |
 
-## Docker (tùy chọn)
+## Setup tự động
 
-Nếu máy đủ RAM và đã cài Docker Desktop:
+Lần đầu trên máy chủ:
 
 ```
-scripts\start-proctor-edge-docker.bat
+scripts\setup-windows.bat
 ```
+
+Ubuntu: `sudo bash scripts/setup-linux.sh`
 
 ## Bảo mật LAN
 

@@ -38,7 +38,7 @@ try {
   console.error('\n❌ Không kết nối được API Edge trong thời gian chờ.\n');
   console.error('Kiểm tra:');
   console.error('  1. PostgreSQL (5432) và Redis (6379) đang chạy');
-  console.error('  2. Chạy: npm run dev:prepare  hoặc  docker compose -f docker/docker-compose.yml up -d');
+  console.error('  2. Chạy: npm run dev:prepare  hoặc  npm run setup');
   console.error('  3. Xem log API: npm run dev:api');
   console.error(`  4. Thử tay: curl ${url}\n`);
   process.exit(1);

@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /**
- * VVKCBT Edge LAN pre-exam checklist — native or Docker deploy.
+ * VVKCBT Edge LAN pre-exam checklist — native deploy.
  * Usage: node scripts/edge-bootstrap.mjs [--api http://localhost:3000]
  */
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
 import net from 'net';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -76,36 +75,14 @@ function checkNginxPortable() {
   };
 }
 
-function checkDockerOptional() {
-  try {
-    const out = execSync('docker compose -f docker/docker-compose.yml ps --format json', {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const running = out
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .filter((l) => {
-        try {
-          return JSON.parse(l).State === 'running';
-        } catch {
-          return false;
-        }
-      });
-    return {
-      name: 'Docker stack (tùy chọn)',
-      pass: running.length > 0,
-      detail: running.length ? `${running.length} container(s)` : 'Dùng native — OK nếu Postgres chạy',
-    };
-  } catch {
-    return {
-      name: 'Docker stack (tùy chọn)',
-      pass: true,
-      detail: 'Không dùng Docker — native deploy',
-    };
+function loadEnvFlag(key) {
+  const envPath = resolve(root, '.env');
+  if (!existsSync(envPath)) return process.env[key] === 'true';
+  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+    const m = line.match(new RegExp(`^${key}\\s*=\\s*(.+)$`));
+    if (m) return m[1].trim() === 'true';
   }
+  return process.env[key] === 'true';
 }
 
 async function get(path) {
@@ -124,7 +101,8 @@ async function main() {
   checks.push(checkNginxPortable());
   checks.push(await checkTcp(5432, 'PostgreSQL'));
   checks.push(await checkTcp(6379, 'Redis (hoặc EDGE_LIGHTWEIGHT=true)'));
-  checks.push(checkDockerOptional());
+
+  const lightweight = loadEnvFlag('EDGE_LIGHTWEIGHT');
 
   try {
     const health = await get('/infra/health');
@@ -163,7 +141,7 @@ async function main() {
     (c) => !c.name.includes('tùy chọn') && c.name !== 'Exam package imported' && c.name !== 'Redis (hoặc EDGE_LIGHTWEIGHT=true)',
   );
   const redisCheck = checks.find((c) => c.name.startsWith('Redis'));
-  const redisPass = redisCheck?.pass || process.env.EDGE_LIGHTWEIGHT === 'true';
+  const redisPass = redisCheck?.pass || lightweight;
 
   for (const c of checks) {
     console.log(`${c.pass ? '✓' : '✗'} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);

@@ -17,7 +17,7 @@
     "dev:student": "node scripts/dev-wait-api.mjs && npm run dev -w @vnu/student",
     "dev:proctor": "node scripts/dev-wait-api.mjs && npm run dev -w @vnu/proctor",
     "dev:launcher": "npx --yes serve scripts -p 3099",
-    "dev:infra": "docker compose -f docker/docker-compose.yml up -d postgres redis",
+    "setup": "node scripts/detect-os-setup.mjs",
     "migration:run": "npm run migration:run -w @vnu/api",
     "migration:generate": "npm run migration:generate -w @vnu/api",
     "seed": "npm run seed -w @vnu/api",

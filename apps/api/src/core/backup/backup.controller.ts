@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, Res, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { multerMemoryZip, readUploadedFileBuffer } from '../../shared/utils/multer-memory';
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -28,14 +29,14 @@ export class BackupController {
   @Post('import')
   @UseGuards(StaffAuthGuard)
   @StaffRoles('admin', 'proctor')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerMemoryZip))
   async importBackup(@UploadedFile() file: Express.Multer.File) {
-    if (!file?.buffer?.length) throw new BadRequestException('Chưa chọn file sao lưu');
+    const buffer = readUploadedFileBuffer(file, 'Chưa chọn file sao lưu');
     const name = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
     if (!name.endsWith('.zip') && !name.endsWith('.enc')) {
       throw new BadRequestException('File phải có đuôi .zip hoặc .enc');
     }
-    return this.backupService.importAndRestore(file.buffer, name);
+    return this.backupService.importAndRestore(buffer, name);
   }
 
   @Get('download/:filename')

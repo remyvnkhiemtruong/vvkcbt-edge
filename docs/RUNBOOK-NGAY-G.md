@@ -6,7 +6,7 @@
 
 | Máy Composer (soạn) | Máy Edge (chủ) |
 |---------------------|----------------|
-| Cấu hình ca (tên kỳ, GK/CK) | `powershell -File scripts\setup-native.ps1` |
+| Cấu hình ca (tên kỳ, GK/CK) | `scripts\setup-windows.bat` |
 | **Lặp từng môn:** chọn môn → DS → đề → SBD → xuất 1 ZIP/USB | `npm install` + `npm run build` |
 | Niêm phong USB + nhãn môn/giờ | Font WOFF2 + logo branding |
 | Dry-run Composer trước khi giao USB | `node scripts/edge-bootstrap.mjs` |
@@ -51,7 +51,7 @@
 | Vấn đề | Hành động |
 |--------|-----------|
 | API không lên | Kiểm tra Postgres port 5432; `npm run start:prod -w @vnu/api` |
-| Import lỗi | Dry-run ZIP trên CBT - Viewer; kiểm tra Docker/Postgres
+| Import lỗi | Dry-run ZIP trên CBT - Viewer; kiểm tra Postgres/nginx |
 | Thí sinh không login | Kiểm tra ZIP đã import; đúng tài khoản môn (6 số) + PIN 8 số |
 | Mất mạng LAN | Bài đã autosave IndexedDB; chờ mạng để đồng bộ |
 

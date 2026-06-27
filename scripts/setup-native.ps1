@@ -23,7 +23,7 @@ if (-not $lanIp) { $lanIp = "192.168.1.50" }
 
 Write-Host "IP LAN goi y: $lanIp"
 
-$origins = "http://localhost,http://127.0.0.1,http://$lanIp"
+$origins = "http://localhost,http://127.0.0.1,http://$lanIp,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"
 $lines = Get-Content $envFile -ErrorAction SilentlyContinue
 $out = @()
 $seenDeploy = $false
@@ -62,7 +62,7 @@ Thi sinh (Chrome kiosk): scripts\student-kiosk.bat $lanIp
 CHECKLIST NGAY G
 ----------------
 Composer (may soan)          | Edge (may chu)
-[ ] Cau hinh ca + lich mon   | [ ] setup-native.ps1 + .env
+[ ] Cau hinh ca + lich mon   | [ ] scripts\setup-windows.bat
 [ ] Soan de 3 mode           | [ ] npm run build
 [ ] Import DS + in phieu     | [ ] Import ZIP (dry-run truoc)
 [ ] Xuat ZIP                 | [ ] Mo de dung gio (Lich mon)

@@ -67,5 +67,6 @@ describe('compareShortAnswer', () => {
   it('treats comma and dot as equivalent', () => {
     assert.equal(compareShortAnswer('2,5', '2.5'), true);
     assert.equal(compareShortAnswer('2.5', '2,5'), true);
+    assert.equal(compareShortAnswer('-2,5', '-2.5'), true);
   });
 });
