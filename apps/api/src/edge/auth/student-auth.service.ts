@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, Optional, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, InternalServerErrorException, Optional, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +20,7 @@ import { ProctoringGateway } from '../proctoring/proctoring.gateway';
 import { SubjectRoomCompletionService } from '../proctoring/subject-room-completion.service';
 import { isIpBindingDisabled, normalizeClientIp } from '../../shared/utils/client-ip';
 import { resolveMediaInValue } from '../../shared/utils/resolve-media-paths';
+import { RateLimitService } from '../../shared/rate-limit/rate-limit.service';
 
 @Injectable()
 export class StudentAuthService {
@@ -43,6 +44,7 @@ export class StudentAuthService {
     private readonly configService: ConfigService,
     private readonly proctoringGateway: ProctoringGateway,
     private readonly subjectRoomCompletion: SubjectRoomCompletionService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   async getRoomContext() {
@@ -120,6 +122,13 @@ export class StudentAuthService {
   async login(account: string, pin: string, examSessionId: string | undefined, clientIp: string) {
     const normalizedIp = normalizeClientIp(clientIp);
     const trimmed = account.trim();
+
+    try {
+      await this.rateLimit.check(`student:${trimmed}`, 5, 60);
+    } catch {
+      throw new HttpException('Quá nhiều lần đăng nhập', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     const resolvedSessionId = await this.resolveExamSessionId(examSessionId);
 
     let session = await this.sessionRepo.findOne({

@@ -23,7 +23,8 @@ export class BackupController {
   @UseGuards(StaffAuthGuard)
   @StaffRoles('admin', 'proctor')
   async restore(@Body() body: { filename: string }) {
-    return this.backupService.restoreBackup(body.filename);
+    const safe = path.basename(body.filename);
+    return this.backupService.restoreBackup(safe);
   }
 
   @Post('import')

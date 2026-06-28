@@ -8,7 +8,10 @@ Dùng trước ngày thi thật (`NODE_ENV=production`).
 - [ ] `ANONYMIZATION_SALT` — chuỗi ngẫu nhiên riêng
 - [ ] `AUDIO_ENCRYPTION_KEY` — đúng 32 byte hex
 - [ ] `ADMIN_PASSWORD_HASH` — bcrypt (`node scripts/hash-password.mjs <pass>`)
-- [ ] Giám thị: **`proctor` / `proctor123`** (tài khoản cố định, API tự đồng bộ khi khởi động)
+- [ ] `PROCTOR_PASSWORD_HASH` — bcrypt (`node scripts/hash-password.mjs <pass>`)
+- [ ] `COMPOSER_PASSWORD_HASH` — bcrypt (máy soạn gói; Edge production không cần composer login nếu không dùng)
+- [ ] `ALLOW_DEFAULT_PROCTOR` — **không set** hoặc `false` (bắt buộc; `true` chỉ dev)
+- [ ] Giám thị: set `PROCTOR_PASSWORD_HASH` + tạo user qua `scripts/seed-proctor-user.mjs` (không dùng bypass mặc định)
 - [ ] `EDGE_ORIGINS` — chỉ IP/host LAN thực tế (không `*`)
 
 ## Khuyến nghị

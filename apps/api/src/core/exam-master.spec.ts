@@ -16,8 +16,8 @@ describe('Exam master X column parsing', () => {
     expect(isMarkedXForTest('no')).toBe(false);
   });
 
-  it('maps all 10 TN THPT subject column headers', () => {
-    expect(TN_THPT_SUBJECTS).toHaveLength(10);
+  it('maps all 11 TN THPT subject column headers', () => {
+    expect(TN_THPT_SUBJECTS).toHaveLength(11);
     for (const subj of TN_THPT_SUBJECTS) {
       expect(resolveSubjectFromHeader(subj.nameVi)).toBe(subj.code);
     }
@@ -51,7 +51,7 @@ describe('Exam master mandatory validation', () => {
 });
 
 describe('Exam master workbook structure', () => {
-  it('builds student sheet with 10 X columns', async () => {
+  it('builds student sheet with 11 X columns', async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('DanhSachThiSinh');
     const headers = ['Họ tên', 'SBD', 'Lớp', 'Ngày sinh', 'Giới tính', ...TN_THPT_SUBJECTS.map((s) => s.nameVi), 'Ghi chú'];
@@ -75,7 +75,7 @@ describe('Exam master workbook structure', () => {
       if (code) subjectCols.set(header, code);
     });
 
-    expect(subjectCols.size).toBe(10);
+    expect(subjectCols.size).toBe(11);
 
     const values: Record<string, string> = {};
     headerMap.forEach((header, col) => {

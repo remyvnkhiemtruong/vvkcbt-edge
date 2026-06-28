@@ -167,8 +167,12 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
 
   @SubscribeMessage('help_request')
   async helpRequest(client: Socket, data: { sessionId: string; reason?: string }) {
+    const payload = this.verifySocketToken(client, ['student']);
+    const sessionId = payload.sessionId;
+    if (!sessionId) throw new WsException('Missing sessionId in token');
+
     const session = await this.sessionRepo.findOne({
-      where: { id: data.sessionId },
+      where: { id: sessionId },
       relations: ['examSession'],
     });
     if (!session) return;
@@ -189,8 +193,13 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
 
   @SubscribeMessage('focus_violation')
   async focusViolation(client: Socket, data: { sessionId: string; reason?: string }) {
+    const payload = this.verifySocketToken(client, ['student', 'proctor', 'admin']);
+    const sessionId =
+      payload.role === 'student' ? payload.sessionId : data.sessionId;
+    if (!sessionId) throw new WsException('Missing sessionId');
+
     const session = await this.sessionRepo.findOne({
-      where: { id: data.sessionId },
+      where: { id: sessionId },
       relations: ['examSession'],
     });
     if (!session) return;
@@ -223,6 +232,7 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       performedBy?: string;
     },
   ) {
+    const payload = this.verifySocketToken(client, ['proctor', 'admin']);
     const session = await this.sessionRepo.findOne({ where: { id: data.studentSessionId } });
     if (!session) return;
 
@@ -267,7 +277,7 @@ export class ProctoringGateway implements OnGatewayConnection, OnGatewayDisconne
       payload: {
         action: data.action,
         sbd: session.sbd,
-        performedBy: data.performedBy,
+        performedBy: payload.sub,
         ...data.payload,
       },
     });

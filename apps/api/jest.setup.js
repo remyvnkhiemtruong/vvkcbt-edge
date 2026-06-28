@@ -1,0 +1,2 @@
+process.env.AUDIO_ENCRYPTION_KEY =
+  process.env.AUDIO_ENCRYPTION_KEY || 'fedcba9876543210fedcba9876543210';

@@ -3,6 +3,7 @@ import fs from 'fs';
 import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -53,6 +54,35 @@ if (!fs.existsSync(envPath) && fs.existsSync(envExample)) {
   fs.copyFileSync(envExample, envPath);
   console.log('Created .env from .env.example');
 }
+
+function upsertEnvKey(filePath, key, value) {
+  let content = fs.readFileSync(filePath, 'utf-8');
+  const re = new RegExp(`^${key}=.*$`, 'm');
+  if (re.test(content)) {
+    content = content.replace(re, `${key}=${value}`);
+  } else {
+    content += `\n${key}=${value}\n`;
+  }
+  fs.writeFileSync(filePath, content);
+}
+
+function ensureAudioEncryptionKey() {
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, 'utf-8');
+  const match = content.match(/^AUDIO_ENCRYPTION_KEY\s*=\s*(.+)$/m);
+  const current = match?.[1]?.trim();
+  const placeholders = [
+    '',
+    'GENERATE_YOUR_OWN_32_BYTE_HEX_KEY',
+    '0123456789abcdef0123456789abcdef',
+  ];
+  if (!current || placeholders.includes(current)) {
+    upsertEnvKey(envPath, 'AUDIO_ENCRYPTION_KEY', randomBytes(16).toString('hex'));
+    console.log('Generated AUDIO_ENCRYPTION_KEY in .env');
+  }
+}
+
+ensureAudioEncryptionKey();
 
 // 1b. Validate DATABASE_URL
 function freePort(port) {

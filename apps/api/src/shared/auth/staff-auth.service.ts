@@ -34,7 +34,11 @@ export class StaffAuthService {
       throw new HttpException('Quá nhiều lần đăng nhập', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    if (username === DEFAULT_PROCTOR_USERNAME && password === DEFAULT_PROCTOR_PASSWORD) {
+    if (
+      this.configService.get<string>('ALLOW_DEFAULT_PROCTOR') === 'true' &&
+      username === DEFAULT_PROCTOR_USERNAME &&
+      password === DEFAULT_PROCTOR_PASSWORD
+    ) {
       const token = this.jwtService.sign({ sub: DEFAULT_PROCTOR_USERNAME, role: 'proctor' });
       return { token, role: 'proctor' as const };
     }

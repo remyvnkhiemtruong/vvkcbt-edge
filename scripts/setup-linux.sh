@@ -52,8 +52,13 @@ echo "[4/9] Tao database vnu_exam..."
 sudo -u postgres env PGUSER=postgres PGDATABASE=postgres node "$ROOT/scripts/sql/init-native-db.mjs"
 
 echo "[5/9] Cau hinh .env..."
+ENV_NEW=0
 if [[ ! -f "$ROOT/.env" && -f "$ROOT/.env.example" ]]; then
   cp "$ROOT/.env.example" "$ROOT/.env"
+  ENV_NEW=1
+fi
+if [[ "$ENV_NEW" == "1" ]]; then
+  node "$ROOT/scripts/generate-setup-secrets.mjs" "$ROOT/.env"
 fi
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if [[ -z "$LAN_IP" ]]; then LAN_IP="127.0.0.1"; fi
@@ -68,6 +73,14 @@ if ! test_port 6379; then
     sed -i 's|^EDGE_LIGHTWEIGHT=.*|EDGE_LIGHTWEIGHT=true|' "$ROOT/.env"
   else
     echo 'EDGE_LIGHTWEIGHT=true' >> "$ROOT/.env"
+  fi
+fi
+
+if [[ "$DEV_MODE" != "true" ]]; then
+  if grep -q '^NODE_ENV=' "$ROOT/.env" 2>/dev/null; then
+    sed -i 's|^NODE_ENV=.*|NODE_ENV=production|' "$ROOT/.env"
+  else
+    echo 'NODE_ENV=production' >> "$ROOT/.env"
   fi
 fi
 
@@ -104,6 +117,7 @@ else
   echo "  Proctor: http://${LAN_IP}/proctor/"
   echo "  API:     npm run start:prod -w @vnu/api"
 fi
-echo "  Proctor login: proctor / proctor123"
+echo "  Proctor login: proctor / proctor123 (dev — production: set PROCTOR_PASSWORD_HASH)"
+echo "  Chua cau hinh ADMIN_PASSWORD_HASH/PROCTOR_PASSWORD_HASH/COMPOSER_PASSWORD_HASH — chay: node scripts/hash-password.mjs <mat-khau> roi dan vao .env truoc khi thi that"
 echo "  Check: node scripts/edge-bootstrap.mjs"
 echo "========================================"

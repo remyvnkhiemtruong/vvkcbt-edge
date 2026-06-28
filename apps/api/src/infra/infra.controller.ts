@@ -24,11 +24,17 @@ import { isEdgeLightweight } from '../shared/config/edge-env';
 
 const audioTokens = new Map<string, { assetId: string; sessionId: string; expires: number }>();
 
+export function resolveAudioEncryptionKey(): Buffer {
+  const raw = process.env.AUDIO_ENCRYPTION_KEY?.trim();
+  if (!raw || raw.slice(0, 32).length < 32) {
+    throw new Error('FATAL: AUDIO_ENCRYPTION_KEY phải được cấu hình (≥32 ký tự hex)');
+  }
+  return Buffer.from(raw.slice(0, 32));
+}
+
 @Controller('infra')
 export class InfraController {
-  private audioKey = Buffer.from(
-    (process.env.AUDIO_ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef').slice(0, 32),
-  );
+  private audioKey = resolveAudioEncryptionKey();
 
   constructor(
     @InjectRepository(MediaAsset)
@@ -132,10 +138,14 @@ export class InfraController {
     if (!session) throw new NotFoundException('Session not found');
 
     const maxPlays = session.examSession?.rules?.audio?.max_plays ?? 2;
-    const audioMeta = (session.answers.audio_meta as { playCount?: number }) ?? {};
+    const audioMeta = (session.answers.audio_meta as { playCount?: number }) ?? { playCount: 0 };
     if ((audioMeta.playCount ?? 0) >= maxPlays) {
       throw new UnauthorizedException('Max plays exceeded');
     }
+
+    audioMeta.playCount = (audioMeta.playCount ?? 0) + 1;
+    session.answers = { ...session.answers, audio_meta: audioMeta };
+    await this.sessionRepo.save(session);
 
     const token = randomBytes(16).toString('hex');
     audioTokens.set(token, {
@@ -156,14 +166,6 @@ export class InfraController {
 
     const asset = await this.mediaRepo.findOne({ where: { id: entry.assetId } });
     if (!asset) throw new NotFoundException('Audio not found');
-
-    const session = await this.sessionRepo.findOne({ where: { id: entry.sessionId } });
-    if (session) {
-      const audioMeta = (session.answers.audio_meta as { playCount?: number }) ?? { playCount: 0 };
-      audioMeta.playCount = (audioMeta.playCount ?? 0) + 1;
-      session.answers = { ...session.answers, audio_meta: audioMeta };
-      await this.sessionRepo.save(session);
-    }
 
     const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
     const filePath = path.join(uploadDir, asset.filename);

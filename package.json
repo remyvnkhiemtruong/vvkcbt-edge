@@ -24,6 +24,7 @@
     "test": "npm run test -w @vnu/shared-types && npm run test -w @vnu/exam-package-kit && npm run test -w @vnu/web-shared && npm run test -w @vnu/api",
     "test:zip-roundtrip": "npm run test:zip-roundtrip -w @vnu/api",
     "test:e2e": "playwright test",
+    "lint": "eslint .",
     "preflight": "node scripts/preflight-day-g.mjs",
     "generate-seb": "node scripts/generate-seb.mjs",
     "kit-sync-check": "node scripts/kit-sync-check.mjs",
@@ -32,11 +33,14 @@
     "reset:exam": "node scripts/reset-exam-data.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.49.1",
     "concurrently": "^9.2.3",
+    "eslint": "^10.6.0",
+    "pg": "^8.13.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "wait-on": "^8.0.5",
-    "@playwright/test": "^1.49.1",
-    "pg": "^8.13.1"
+    "typescript-eslint": "^8.62.0",
+    "wait-on": "^8.0.5"
   }
 }

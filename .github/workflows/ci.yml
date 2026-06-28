@@ -35,6 +35,7 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm run lint
       - run: npm run test -w @vnu/shared-types
       - run: npm run test -w @vnu/exam-package-kit
       - run: npm run test -w @vnu/web-shared
@@ -43,7 +44,7 @@ jobs:
           DATABASE_URL: postgresql://vnu:vnu_secret@localhost:5432/vnu_exam
           JWT_SECRET: ci-jwt-secret-min-32-characters-long
           ANONYMIZATION_SALT: ci-salt
-          AUDIO_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+          AUDIO_ENCRYPTION_KEY: fedcba9876543210fedcba9876543210
 
       - name: Run API migrations
         run: npm run migration:run -w @vnu/api
@@ -52,11 +53,14 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
-      - name: API unit tests (ZIP + blueprint roundtrip)
-        run: npm test -w @vnu/api -- --testPathPattern="zip-roundtrip|blueprint-roundtrip"
+      - name: API unit tests
+        run: npm run test -w @vnu/api
         env:
           DATABASE_URL: postgresql://vnu:vnu_secret@localhost:5432/vnu_exam
           JWT_SECRET: ci-jwt-secret-min-32-characters-long
+          AUDIO_ENCRYPTION_KEY: fedcba9876543210fedcba9876543210
+
+      - run: npm audit --omit=dev --audit-level=high
 
       - name: Kit sync check
         run: npm run kit-sync-check
@@ -78,4 +82,4 @@ jobs:
           npm run build -w @vnu/shared-types
           npm run build -w @vnu/exam-package-kit
           npm run test -w @vnu/shared-types
-          npm test -w @vnu/api -- --testPathPattern="zip-roundtrip|blueprint-roundtrip"
+          npm run test -w @vnu/api

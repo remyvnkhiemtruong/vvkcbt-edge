@@ -274,13 +274,14 @@ export class CoreService {
   }
 
   async saveMedia(file: Express.Multer.File) {
-    const filename = `${Date.now()}-${file.originalname}`;
+    const safeName = path.basename(file.originalname);
+    const filename = `${Date.now()}-${safeName}`;
     const filepath = path.join(this.uploadDir, filename);
     fs.writeFileSync(filepath, file.buffer);
     const checksum = createHash('sha256').update(file.buffer).digest('hex');
 
     const asset = this.mediaRepo.create({
-      filename: file.originalname,
+      filename: safeName,
       path: filepath,
       mimeType: file.mimetype,
       checksum,

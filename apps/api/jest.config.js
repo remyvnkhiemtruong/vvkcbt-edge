@@ -7,6 +7,7 @@ module.exports = {
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/../jest.setup.js'],
   moduleNameMapper: {
     '^@vnu/shared-types$': '<rootDir>/../../../packages/shared-types/src/index.ts',
     '^@vnu/exam-package-kit$': '<rootDir>/../../../packages/exam-package-kit/src/index.ts',

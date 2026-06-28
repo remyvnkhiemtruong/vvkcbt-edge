@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -74,7 +74,12 @@ export class BackupService {
   }
 
   async restoreBackup(zipFilename: string): Promise<{ message: string }> {
-    let zipPath = path.join(this.backupDir, zipFilename);
+    const safeFilename = path.basename(zipFilename);
+    if (safeFilename !== zipFilename) {
+      throw new BadRequestException('Tên file không hợp lệ');
+    }
+
+    let zipPath = path.join(this.backupDir, safeFilename);
     if (!fs.existsSync(zipPath)) throw new Error('Backup file not found');
 
     const passphrase = process.env.BACKUP_PASSPHRASE?.trim();
@@ -94,7 +99,7 @@ export class BackupService {
     if (dbUrl && fs.existsSync(dumpPath)) {
       try {
         execSync(`psql "${dbUrl}" -f "${dumpPath}"`, { stdio: 'pipe' });
-      } catch (err) {
+      } catch {
         fs.rmSync(workDir, { recursive: true, force: true });
         throw new Error('Database restore failed — kiểm tra pg_dump/psql');
       }
@@ -109,7 +114,7 @@ export class BackupService {
     }
 
     fs.rmSync(workDir, { recursive: true, force: true });
-    return { message: `Đã phục hồi từ ${zipFilename}` };
+    return { message: `Đã phục hồi từ ${safeFilename}` };
   }
 
   private zipDirectory(sourceDir: string, outPath: string): Promise<void> {

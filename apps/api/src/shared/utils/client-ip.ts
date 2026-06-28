@@ -17,12 +17,7 @@ export function normalizeClientIp(raw: string | undefined | null): string {
 }
 
 export function getClientIpFromRequest(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const raw =
-    (typeof forwarded === 'string' ? forwarded : Array.isArray(forwarded) ? forwarded[0] : undefined) ||
-    req.ip ||
-    req.socket?.remoteAddress ||
-    '';
+  const raw = req.ip || req.socket?.remoteAddress || '';
   return normalizeClientIp(raw);
 }
 

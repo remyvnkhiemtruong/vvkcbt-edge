@@ -5,27 +5,9 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { parseEdgeCorsOrigins } from './shared/cors-origins';
+import { validateProductionSecrets } from './shared/config/validate-production-secrets';
 
 config({ path: resolve(__dirname, '../../../.env') });
-
-function validateProductionSecrets() {
-  if (process.env.NODE_ENV !== 'production') return;
-  const required = [
-    'JWT_SECRET',
-    'ANONYMIZATION_SALT',
-    'AUDIO_ENCRYPTION_KEY',
-    'ADMIN_PASSWORD_HASH',
-  ];
-  const missing = required.filter((k) => !process.env[k]?.trim());
-  if (missing.length) {
-    console.error(`FATAL: Missing required env in production: ${missing.join(', ')}`);
-    process.exit(1);
-  }
-  if (process.env.JWT_SECRET === 'dev-secret' || process.env.JWT_SECRET!.length < 32) {
-    console.error('FATAL: JWT_SECRET must be at least 32 chars in production');
-    process.exit(1);
-  }
-}
 
 function parseCorsOrigins(): string[] | boolean {
   return parseEdgeCorsOrigins();

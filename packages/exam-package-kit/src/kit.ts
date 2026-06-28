@@ -26,6 +26,7 @@ import {
 } from '@vnu/shared-types';
 
 export const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+export const MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 export const REQUIRED_FILES = ['manifest.json', 'session.json', 'subjects.json'];
 
 export function defaultExamRules(): ExamRules {
@@ -517,14 +518,41 @@ export async function packState(state: ExamPackageExportState): Promise<Buffer> 
   }
 }
 
+export function getDirSizeBytes(dir: string): number {
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += getDirSizeBytes(full);
+    } else {
+      total += fs.statSync(full).size;
+    }
+  }
+  return total;
+}
+
+export function checkExtractedZipSizeLimit(sizeBytes: number): void {
+  if (sizeBytes > MAX_EXTRACTED_BYTES) {
+    throw new Error(
+      'Gói ZIP sau khi giải nén vượt quá 500MB — có thể là file lỗi hoặc zip-bomb',
+    );
+  }
+}
+
 export async function extractZipSafe(buffer: Buffer): Promise<string> {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vnu-import-'));
   const zipPath = path.join(workDir, 'upload.zip');
   fs.writeFileSync(zipPath, buffer);
   const extractDir = path.join(workDir, 'extracted');
   fs.mkdirSync(extractDir, { recursive: true });
-  await extract(zipPath, { dir: extractDir });
-  return extractDir;
+  try {
+    await extract(zipPath, { dir: extractDir });
+    checkExtractedZipSizeLimit(getDirSizeBytes(extractDir));
+    return extractDir;
+  } catch (err) {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 export async function validateZip(buffer: Buffer): Promise<ExamPackageValidateResult> {

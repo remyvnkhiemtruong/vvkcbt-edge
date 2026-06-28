@@ -1,6 +1,7 @@
 # VVKCBT — Thiet lap native (khong Docker)
 param(
-  [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+  [switch]$Dev
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,9 +9,15 @@ Set-Location $Root
 
 $envExample = Join-Path $Root ".env.example"
 $envFile = Join-Path $Root ".env"
+$envNew = $false
 if (-not (Test-Path $envFile) -and (Test-Path $envExample)) {
   Copy-Item $envExample $envFile
+  $envNew = $true
   Write-Host "Da tao .env tu .env.example"
+}
+
+if ($envNew) {
+  & node (Join-Path $PSScriptRoot "generate-setup-secrets.mjs") $envFile
 }
 
 $lanIp = (
@@ -30,18 +37,25 @@ $seenDeploy = $false
 $seenOrigins = $false
 $seenLock = $false
 $seenLight = $false
+$seenNodeEnv = $false
 
 foreach ($line in $lines) {
   if ($line -match '^DEPLOY_PROFILE=') { $out += "DEPLOY_PROFILE=native"; $seenDeploy = $true; continue }
   if ($line -match '^EDGE_ORIGINS=') { $out += "EDGE_ORIGINS=$origins"; $seenOrigins = $true; continue }
   if ($line -match '^VITE_EXAM_LOCK_MODE=') { $out += "VITE_EXAM_LOCK_MODE=browser"; $seenLock = $true; continue }
   if ($line -match '^EDGE_LIGHTWEIGHT=') { $out += "EDGE_LIGHTWEIGHT=false"; $seenLight = $true; continue }
+  if ($line -match '^NODE_ENV=') {
+    if (-not $Dev) { $out += "NODE_ENV=production"; $seenNodeEnv = $true }
+    else { $out += $line }
+    continue
+  }
   $out += $line
 }
 if (-not $seenDeploy) { $out += "DEPLOY_PROFILE=native" }
 if (-not $seenOrigins) { $out += "EDGE_ORIGINS=$origins" }
 if (-not $seenLock) { $out += "VITE_EXAM_LOCK_MODE=browser" }
 if (-not $seenLight) { $out += "EDGE_LIGHTWEIGHT=false" }
+if (-not $Dev -and -not $seenNodeEnv) { $out += "NODE_ENV=production" }
 Set-Content -Path $envFile -Value $out -Encoding UTF8
 
 $infoPath = Join-Path $Root "THONG-TIN-PHONG-THI.txt"

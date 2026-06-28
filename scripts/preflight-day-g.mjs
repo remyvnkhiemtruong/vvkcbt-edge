@@ -7,6 +7,7 @@ import net from 'net';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { productionEnvChecks } from './env-preflight-checks.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -47,6 +48,11 @@ function tcpCheck(host, port, label) {
 
 async function main() {
   console.log('VVKCBT Pre-flight ngày G\n');
+
+  for (const c of productionEnvChecks(root)) {
+    if (c.pass) pass(c.name, c.detail);
+    else fail(c.name, c.detail);
+  }
 
   await tcpCheck('127.0.0.1', 5432, 'PostgreSQL');
   await tcpCheck('127.0.0.1', 6379, 'Redis');

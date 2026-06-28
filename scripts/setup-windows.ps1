@@ -337,7 +337,7 @@ if (-not $redisOk) {
     Set-Content -Path $envPath -Value $out -Encoding UTF8
   }
 }
-& (Join-Path $PSScriptRoot 'setup-native.ps1') -Root $Root
+& (Join-Path $PSScriptRoot 'setup-native.ps1') -Root $Root -Dev:$Dev
 
 Write-Host '[6/9] npm install...'
 & npm install
@@ -371,7 +371,8 @@ if ($Dev) {
   Write-Host '  Dev:    npm run dev'
 } else {
   Write-Host '  Server: scripts\start-edge-server.bat'
-  Write-Host '  Check:  node scripts\edge-bootstrap.mjs'
 }
-Write-Host '  Proctor login: proctor / proctor123'
+Write-Host '  Chua cau hinh ADMIN_PASSWORD_HASH/PROCTOR_PASSWORD_HASH/COMPOSER_PASSWORD_HASH — chay: node scripts/hash-password.mjs <mat-khau> roi dan vao .env truoc khi thi that'
+Write-Host '  Check:  node scripts/edge-bootstrap.mjs'
+Write-Host '  Proctor login: proctor / proctor123 (dev — production: set PROCTOR_PASSWORD_HASH)'
 Write-Host '========================================'

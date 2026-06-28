@@ -3,10 +3,11 @@
  * VVKCBT Edge LAN pre-exam checklist — native deploy.
  * Usage: node scripts/edge-bootstrap.mjs [--api http://localhost:3000]
  */
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import net from 'net';
+import { loadEnvFlag, productionEnvChecks } from './env-preflight-checks.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -75,14 +76,8 @@ function checkNginxPortable() {
   };
 }
 
-function loadEnvFlag(key) {
-  const envPath = resolve(root, '.env');
-  if (!existsSync(envPath)) return process.env[key] === 'true';
-  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
-    const m = line.match(new RegExp(`^${key}\\s*=\\s*(.+)$`));
-    if (m) return m[1].trim() === 'true';
-  }
-  return process.env[key] === 'true';
+function loadEnvFlagLocal(key) {
+  return loadEnvFlag(root, key);
 }
 
 async function get(path) {
@@ -94,6 +89,14 @@ async function main() {
   console.log('VVKCBT Edge Bootstrap — LAN checklist\n');
   console.log(`API: ${apiBase}\n`);
 
+  for (const c of productionEnvChecks(root)) {
+    checks.push({
+      name: c.name,
+      pass: c.pass,
+      detail: c.detail,
+    });
+  }
+
   checks.push(checkDist());
   checks.push(checkLogo('student', resolve(root, 'apps/web/student/public/branding/logo.png')));
   checks.push(checkLogo('proctor', resolve(root, 'apps/web/proctor/public/branding/logo.png')));
@@ -102,7 +105,7 @@ async function main() {
   checks.push(await checkTcp(5432, 'PostgreSQL'));
   checks.push(await checkTcp(6379, 'Redis (hoặc EDGE_LIGHTWEIGHT=true)'));
 
-  const lightweight = loadEnvFlag('EDGE_LIGHTWEIGHT');
+  const lightweight = loadEnvFlagLocal('EDGE_LIGHTWEIGHT');
 
   try {
     const health = await get('/infra/health');
