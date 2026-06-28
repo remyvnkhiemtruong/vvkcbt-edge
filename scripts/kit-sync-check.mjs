@@ -1,43 +1,9 @@
 import { createHash } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { edgeRoot, resolveComposerRoot, exactPairs } from './kit-sync-paths.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const edgeRoot = path.resolve(__dirname, '..');
-const composerCandidates = [
-  process.env.COMPOSER_ROOT,
-  path.join(edgeRoot, 'vnu-composer'),
-  path.resolve(edgeRoot, '..', 'vnu-composer'),
-].filter(Boolean);
-const composerRoot = composerCandidates.find((p) => existsSync(p)) ?? composerCandidates[composerCandidates.length - 1];
-
-/** [edgeRelative, composerRelative] — exact hash match */
-const exactPairs = [
-  ['apps/web/shared/src/i18n/brand.ts', 'packages/web-shared/src/i18n/brand.ts'],
-  ['packages/shared-types/src/blueprint-validator.ts', 'packages/shared-types/src/blueprint-validator.ts'],
-  ['packages/shared-types/src/exam-package.ts', 'packages/shared-types/src/exam-package.ts'],
-  ['packages/shared-types/src/question-order.ts', 'packages/shared-types/src/question-order.ts'],
-  ['packages/shared-types/src/tn-thpt-catalog.ts', 'packages/shared-types/src/tn-thpt-catalog.ts'],
-  ['packages/shared-types/src/exam-structure.ts', 'packages/shared-types/src/exam-structure.ts'],
-  ['packages/exam-package-kit/src/kit.ts', 'packages/exam-package-kit/src/kit.ts'],
-  ['apps/web/shared/src/utils/exam-clusters.ts', 'packages/web-shared/src/utils/exam-clusters.ts'],
-  ['apps/web/shared/src/components/ExamViewShell.tsx', 'packages/web-shared/src/components/ExamViewShell.tsx'],
-  ['apps/web/shared/src/components/ExamQuestionPalette.tsx', 'packages/web-shared/src/components/ExamQuestionPalette.tsx'],
-  ['apps/web/shared/src/components/QuestionRenderer.tsx', 'packages/web-shared/src/components/QuestionRenderer.tsx'],
-  ['apps/web/shared/src/components/ClusterSubtypeRenderer.tsx', 'packages/web-shared/src/components/ClusterSubtypeRenderer.tsx'],
-  ['apps/web/shared/src/components/RichTextContent.tsx', 'packages/web-shared/src/components/RichTextContent.tsx'],
-  ['apps/web/shared/src/components/RichTextField.tsx', 'packages/web-shared/src/components/RichTextField.tsx'],
-  ['apps/web/shared/src/components/TrueFalseRenderer.tsx', 'packages/web-shared/src/components/TrueFalseRenderer.tsx'],
-  ['apps/web/shared/src/components/ShortAnswerRenderer.tsx', 'packages/web-shared/src/components/ShortAnswerRenderer.tsx'],
-  ['apps/web/shared/src/components/InformaticsCodeRenderer.tsx', 'packages/web-shared/src/components/InformaticsCodeRenderer.tsx'],
-  ['apps/web/shared/src/components/DualCodeBlockView.tsx', 'packages/web-shared/src/components/DualCodeBlockView.tsx'],
-  ['apps/web/shared/src/utils/rich-text-parser.ts', 'packages/web-shared/src/utils/rich-text-parser.ts'],
-  ['apps/web/shared/src/utils/media-url.ts', 'packages/web-shared/src/utils/media-url.ts'],
-  ['packages/shared-types/src/question-content.ts', 'packages/shared-types/src/question-content.ts'],
-  ['apps/web/shared/src/styles/exam-view.css', 'packages/web-shared/src/styles/exam-view.css'],
-  ['apps/web/shared/src/theme/exam-theme.css', 'packages/web-shared/src/theme/exam-theme.css'],
-];
+const composerRoot = resolveComposerRoot();
 
 /** Shared i18n — both repos must contain exam UI keys */
 const sharedMarkerChecks = [
@@ -78,6 +44,11 @@ function normalizeBrandLogo(content) {
 }
 
 let failed = false;
+
+if (!existsSync(composerRoot)) {
+  console.error(`Composer root not found: ${composerRoot}`);
+  process.exit(1);
+}
 
 for (const [edgeRel, composerRel] of exactPairs) {
   const a = path.join(edgeRoot, edgeRel);

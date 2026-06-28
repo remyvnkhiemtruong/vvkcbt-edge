@@ -36,10 +36,14 @@ describe('extractZipSafe zip-bomb guard', () => {
   });
 
   it('extractZipSafe cleans up workDir on extract failure', async () => {
-    const before = fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('vnu-import-')).length;
+    const existing = new Set(
+      fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('vnu-import-')),
+    );
     await assert.rejects(() => extractZipSafe(Buffer.from('not-a-zip')));
-    const after = fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('vnu-import-')).length;
-    assert.equal(after, before);
+    const leaked = fs
+      .readdirSync(os.tmpdir())
+      .filter((d) => d.startsWith('vnu-import-') && !existing.has(d));
+    assert.equal(leaked.length, 0, `leaked dirs: ${leaked.join(', ')}`);
   });
 
   it('extractZipSafe accepts empty zip within size limit', async () => {

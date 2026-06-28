@@ -207,7 +207,7 @@ if (fs.existsSync(credPath)) {
   console.log(`  Student: http://127.0.0.1:5173/student/`);
   console.log(`  Proctor: http://127.0.0.1:5174/proctor/`);
   console.log(`  Launcher: http://127.0.0.1:3099/dev-launcher.html  (npm run dev:launcher)`);
-  console.log(`  Composer: repo vnu-composer (standalone)`);
+  console.log(`  Composer: repo vvkcbt-composer (standalone)`);
   console.log(`  Waiting: file://${path.join(root, 'scripts/waiting-room-diagnostic.html')}`);
   console.log('  Student/Proctor sẽ chờ API health trước khi mở Vite...');
   console.log('----------------------------------------');

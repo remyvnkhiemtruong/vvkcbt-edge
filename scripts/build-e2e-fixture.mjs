@@ -2,15 +2,14 @@
 /**
  * Tạo fixture ZIP tối thiểu 1 môn cho E2E (dry-run).
  * Chạy: node scripts/build-e2e-fixture.mjs
- * Yêu cầu: npm run build trong vnu-composer trước.
+ * Yêu cầu: npm run build trong vvkcbt-composer trước.
  */
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const edgeRoot = path.resolve(__dirname, '..');
-const composerRoot = path.resolve(edgeRoot, '..', 'vnu-composer');
+import { resolveComposerRoot, edgeRoot } from './kit-sync-paths.mjs';
+
+const composerRoot = resolveComposerRoot(edgeRoot);
 const outDir = path.join(edgeRoot, 'e2e', 'fixtures');
 const outFile = path.join(outDir, 'exam-package-sample.meta.json');
 

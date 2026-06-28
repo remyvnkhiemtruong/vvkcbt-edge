@@ -28,6 +28,8 @@ import {
 export const MAX_ZIP_BYTES = 100 * 1024 * 1024;
 export const MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 export const REQUIRED_FILES = ['manifest.json', 'session.json', 'subjects.json'];
+/** Môn bắt buộc có đề khi xuất gói full (không single_subject). */
+export const MANDATORY_PAPER_CODES = ['LITERATURE', 'MATH'] as const;
 
 export function defaultExamRules(): ExamRules {
   return {
@@ -158,7 +160,7 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   if (!state.manifest?.packageId) errors.push('Thiếu manifest.packageId');
   if (!state.session?.name?.trim()) errors.push('Thiếu tên kỳ thi');
 
-  for (const code of ['MATH']) {
+  for (const code of MANDATORY_PAPER_CODES) {
     const paper = state.papers?.[code];
     if (!paper?.questions?.length) {
       errors.push(`Môn bắt buộc ${code} chưa có đề hoặc thiếu câu hỏi`);
@@ -197,7 +199,7 @@ function validateFullExport(state: ExamPackageExportState): ExamPackageValidateR
   const qCount = Object.values(state.papers ?? {}).reduce((n, p) => n + (p.questions?.length ?? 0), 0);
   if (qCount === 0) warnings.push('Ngân hàng câu hỏi trống');
 
-  const subjectsToValidate = new Set<string>(['MATH', ...allSubjects]);
+  const subjectsToValidate = new Set<string>([...MANDATORY_PAPER_CODES, ...allSubjects]);
   const blueprint = validateAllSubjectBlueprints(
     state.papers ?? {},
     [...subjectsToValidate],
@@ -594,8 +596,22 @@ export async function validateZip(buffer: Buffer): Promise<ExamPackageValidateRe
     }
 
     const isSingleSubject = manifest?.exportScope === 'single_subject';
+    let packageSubjectCodes: string[] = [];
+    const subjectsPath = path.join(workDir, 'subjects.json');
+    if (fs.existsSync(subjectsPath)) {
+      try {
+        const rows = JSON.parse(fs.readFileSync(subjectsPath, 'utf8')) as ExamPackageSubjectRow[];
+        if (Array.isArray(rows)) packageSubjectCodes = rows.map((s) => s.code).filter(Boolean);
+      } catch {
+        warnings.push('subjects.json không hợp lệ');
+      }
+    }
     const requiredPaperCodes =
-      isSingleSubject && manifest?.subjectCode ? [manifest.subjectCode] : ['MATH'];
+      isSingleSubject && manifest?.subjectCode
+        ? [manifest.subjectCode]
+        : packageSubjectCodes.length > 0
+          ? packageSubjectCodes
+          : [...MANDATORY_PAPER_CODES];
 
     for (const code of requiredPaperCodes) {
       const paperPath = path.join(workDir, 'papers', `${code}.json`);

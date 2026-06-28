@@ -1,11 +1,11 @@
-# VNU Edge × vnu-composer — Compatibility Matrix
+# VNU Edge × vvkcbt-composer — Compatibility Matrix
 
 ## Package versions (pin together)
 
 | Package | Version | Repos |
 |---------|---------|-------|
-| `@vnu/shared-types` | **1.2.0** | VNU Edge, vnu-composer |
-| `@vnu/exam-package-kit` | **1.2.0** | VNU Edge, vnu-composer |
+| `@vnu/shared-types` | **1.2.0** | VNU Edge, vvkcbt-composer |
+| `@vnu/exam-package-kit` | **1.2.0** | VNU Edge, vvkcbt-composer |
 | `EXAM_PACKAGE_FORMAT_VERSION` | `1.2` | manifest.json (accepts `1` import) |
 
 ### v1.2 highlights
@@ -22,7 +22,7 @@
 
 ### Excel import (Composer only)
 
-Sheet `DanhSachThiSinh` with column aliases (see `vnu-composer/apps/web/src/excelImport.ts`):
+Sheet `DanhSachThiSinh` with column aliases (see `vvkcbt-composer/apps/web/src/excelImport.ts`):
 
 | Cột Excel | Trường ZIP |
 |-----------|------------|
@@ -72,7 +72,7 @@ Place WOFF2 files under `public/fonts/`:
 
 - `apps/web/student/public/fonts/`
 - `apps/web/proctor/public/fonts/`
-- `vnu-composer/apps/web/public/fonts/`
+- `vvkcbt-composer/apps/web/public/fonts/`
 
 Expected names: `BeVietnamPro-Regular.woff2`, `BeVietnamPro-SemiBold.woff2`, `BeVietnamPro-Bold.woff2`
 
@@ -93,7 +93,7 @@ npm run test -w @vnu/shared-types
 npm test -w @vnu/api
 
 # Composer
-cd ../vnu-composer && npm run test && npm run build
+cd ../vvkcbt-composer && npm run test && npm run build
 
 # Kit sync (both repos checked out as siblings)
 node scripts/kit-sync-check.mjs
@@ -101,7 +101,7 @@ node scripts/kit-sync-check.mjs
 
 ### Exam UI sync (Student × Composer preview)
 
-Sau khi sửa giao diện làm bài, đồng bộ các file sau từ VNU Edge → `vnu-composer/packages/web-shared/` và `packages/shared-types/`:
+Sau khi sửa giao diện làm bài, đồng bộ các file sau từ VNU Edge → `vvkcbt-composer/packages/web-shared/` và `packages/shared-types/`:
 
 - `question-order.ts`, `tn-thpt-catalog.ts`, `exam-structure.ts`, `question-content.ts`, `exam-package.ts`, `blueprint-validator.ts`
 - `exam-clusters.ts`, `ExamViewShell.tsx`, `ExamQuestionPalette.tsx`, `QuestionRenderer.tsx`, `ClusterSubtypeRenderer.tsx`, `RichTextContent.tsx`, `RichTextField.tsx`, `TrueFalseRenderer.tsx`, `ShortAnswerRenderer.tsx`, `InformaticsCodeRenderer.tsx`, `DualCodeBlockView.tsx`, `rich-text-parser.ts`

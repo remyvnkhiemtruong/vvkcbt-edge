@@ -4,11 +4,10 @@ import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
-const composerRoot = [process.env.COMPOSER_ROOT, path.join(root, 'vnu-composer'), path.resolve(root, '..', 'vnu-composer')]
-  .filter(Boolean)
-  .find((p) => existsSync(p));
+import { edgeRoot, resolveComposerRoot } from './kit-sync-paths.mjs';
+
+const root = edgeRoot;
+const composerRoot = resolveComposerRoot(root);
 
 const pngSrc = path.join(root, 'LogoVVK.png');
 const archive = path.join(root, 'apps/web/shared/assets/branding/logo-vvk.png');

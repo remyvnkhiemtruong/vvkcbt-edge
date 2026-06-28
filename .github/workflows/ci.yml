@@ -12,13 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout vnu-composer (kit sync)
+      - name: Checkout vvkcbt-composer (kit sync)
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/vnu-composer
-          path: vnu-composer
+          repository: ${{ github.repository_owner }}/vvkcbt-composer
+          path: vvkcbt-composer
           ref: ${{ github.ref_name }}
-        continue-on-error: true
 
       - uses: ankane/setup-postgres@v1
         with:
@@ -65,7 +64,7 @@ jobs:
       - name: Kit sync check
         run: npm run kit-sync-check
         env:
-          COMPOSER_ROOT: ${{ github.workspace }}/vnu-composer
+          COMPOSER_ROOT: ${{ github.workspace }}/vvkcbt-composer
 
   composer-kit-smoke:
     runs-on: ubuntu-latest
@@ -76,7 +75,7 @@ jobs:
           node-version: '20'
           cache: npm
 
-      - name: Build exam-package-kit (shared with vnu-composer)
+      - name: Build exam-package-kit (shared with vvkcbt-composer)
         run: |
           npm ci
           npm run build -w @vnu/shared-types

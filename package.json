@@ -28,6 +28,7 @@
     "preflight": "node scripts/preflight-day-g.mjs",
     "generate-seb": "node scripts/generate-seb.mjs",
     "kit-sync-check": "node scripts/kit-sync-check.mjs",
+    "sync:to-composer": "node scripts/sync-kit-to-composer.mjs",
     "backup": "tsx scripts/backup-restore.ts backup",
     "restore": "tsx scripts/backup-restore.ts restore",
     "reset:exam": "node scripts/reset-exam-data.mjs"

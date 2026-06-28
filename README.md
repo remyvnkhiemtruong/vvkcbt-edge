@@ -10,7 +10,7 @@ NestJS + React/Vite + PostgreSQL + Socket.io. Triển khai **native** (Postgres 
 |----------|-------|---------|
 | **CBT** | Student SPA | Thí sinh làm bài (Chrome kiosk) |
 | **CBT - Viewer** | Proctor SPA | Giám thị import ZIP, giám sát |
-| **VVKCBT - Composer** | repo `vnu-composer` | Soạn đề, xuất ZIP |
+| **VVKCBT - Composer** | repo `vvkcbt-composer` | Soạn đề, xuất ZIP |
 
 ## Cấu trúc
 
@@ -80,7 +80,7 @@ npm run dev
 | CBT - Viewer | http://localhost:5174/proctor/ |
 | API | http://localhost:3000/api/infra/health |
 
-**Composer:** repo sibling `vnu-composer` → `npm run dev`
+**Composer:** repo sibling `vvkcbt-composer` → `npm run dev`
 
 ## Quy trình ngày thi
 
